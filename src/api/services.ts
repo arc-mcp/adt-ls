@@ -49,8 +49,9 @@ export interface Services {
   runApplication(ref: ObjectRef): Promise<{ output: string }>;
   /** Read a service binding's details (binding type, OData version, service list). */
   serviceBindingDetails(ref: ObjectRef): Promise<unknown>;
-  /** Publish (or unpublish) a service binding — mutating. */
-  publishServiceBinding(ref: ObjectRef): Promise<unknown>;
+  /** Publish (or unpublish) a service binding — mutating. `service` picks the service
+   * definition an OData V2 binding toggles (default: its first). */
+  publishServiceBinding(ref: ObjectRef, opts?: { service?: string }): Promise<unknown>;
   /** List the OData services a binding exposes (type, version, definitions, publish state). */
   listServices(ref: ObjectRef): Promise<ServiceBindingServices>;
   /** Live OData service info — the **service URL + entity sets** — for a binding's service
@@ -107,10 +108,40 @@ export function createServices(deps: ServicesDeps): Services {
      * Publish (or unpublish) a service binding — adt-ls toggles based on the binding's
      * current published state. Mutating. Returns `{isExecuted, isPublishSuccess,
      * statusMessage}`.
+     *
+     * The action takes the request the VS Code extension builds from the binding details:
+     * `{lsUri, serviceName, serviceVersion, bindingType, odataVersion, serviceBindingName}`.
+     * Without `odataVersion` adt-ls throws a NullPointerException; for OData V2 it toggles
+     * the service content whose service definition equals `serviceName`, and answers
+     * "Missing or invalid inputs for publish action" when none does (both verified live on
+     * 1.1.2).
      */
-    async publishServiceBinding(ref: ObjectRef): Promise<unknown> {
+    async publishServiceBinding(ref: ObjectRef, opts: { service?: string } = {}): Promise<unknown> {
       const lsUri = await resolveAndLoad(ref);
-      return lsp.sendRequest('adtLs/businessservice/srvb/publishandUnpublishAction', { lsUri });
+      const details = await lsp.sendRequest<{
+        odataversion?: string;
+        serviceType?: string;
+        serviceBindingName?: string;
+        services?: string[];
+      } | null>('adtLs/businessservice/srvb/getServiceBindingDetails', { lsUri });
+      const odataVersion = details?.odataversion;
+      if (!odataVersion) {
+        throw new Error(`Could not read the OData version of service binding ${ref.name}; adt-ls needs it to publish.`);
+      }
+      const services = details?.services ?? [];
+      if (opts.service && !services.includes(opts.service)) {
+        throw new Error(
+          `Service binding ${ref.name} has no service definition ${opts.service} (has: ${services.join(', ') || 'none'}).`,
+        );
+      }
+      return lsp.sendRequest('adtLs/businessservice/srvb/publishandUnpublishAction', {
+        lsUri,
+        serviceName: opts.service ?? services[0] ?? '',
+        serviceVersion: '',
+        bindingType: details?.serviceType ?? '',
+        odataVersion,
+        serviceBindingName: details?.serviceBindingName ?? ref.name,
+      });
     },
 
     /** List the OData services a binding exposes (`abap_business_services-fetch_services`):

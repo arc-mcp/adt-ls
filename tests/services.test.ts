@@ -116,3 +116,69 @@ describe('services.getServiceInfo', () => {
     expect(infoArgs).toMatchObject({ serviceName: '/B', serviceDefinition: '/BD', serviceVersion: '0002' });
   });
 });
+
+describe('services.publishServiceBinding', () => {
+  function servicesWith(details: unknown) {
+    const requests: Array<{ method: string; params: unknown }> = [];
+    const recording: LspClient = {
+      sendRequest: async <T>(method: string, params?: unknown): Promise<T> => {
+        requests.push({ method, params });
+        if (method === 'adtLs/businessservice/srvb/getServiceBindingDetails') return details as T;
+        if (method === 'adtLs/businessservice/srvb/publishandUnpublishAction')
+          return { isExecuted: true, isPublishSuccess: true } as T;
+        return { content: '' } as T; // readFile warm-up
+      },
+      sendNotification: async () => {},
+    };
+    const svc = createServices({ lsp: recording, lifecycle, destination: () => 'ADTLS', callTool: async () => ({}) });
+    return { svc, requests };
+  }
+
+  const details = (odataversion: string, services: string[]) => ({
+    serviceBindingName: 'ZUI_X_O2',
+    serviceType: 'ODATA',
+    odataversion,
+    services,
+  });
+
+  it('sends the request the VS Code extension builds from the binding details', async () => {
+    const { svc, requests } = servicesWith(details('V4', ['ZUI_X']));
+    await expect(svc.publishServiceBinding({ name: 'ZUI_X_O2', objectType: 'SRVB/SVB' })).resolves.toEqual({
+      isExecuted: true,
+      isPublishSuccess: true,
+    });
+    expect(requests.at(-1)).toEqual({
+      method: 'adtLs/businessservice/srvb/publishandUnpublishAction',
+      params: {
+        lsUri: 'abap:/x',
+        serviceName: 'ZUI_X',
+        serviceVersion: '',
+        bindingType: 'ODATA',
+        odataVersion: 'V4',
+        serviceBindingName: 'ZUI_X_O2',
+      },
+    });
+  });
+
+  it('toggles the chosen service definition of a V2 binding', async () => {
+    const { svc, requests } = servicesWith(details('V2', ['ZUI_X', 'ZUI_X_V2']));
+    await svc.publishServiceBinding({ name: 'ZUI_X_O2', objectType: 'SRVB/SVB' }, { service: 'ZUI_X_V2' });
+    expect(requests.at(-1)?.params).toMatchObject({ serviceName: 'ZUI_X_V2', odataVersion: 'V2' });
+  });
+
+  it('refuses a service definition the binding does not have', async () => {
+    const { svc, requests } = servicesWith(details('V2', ['ZUI_X']));
+    await expect(
+      svc.publishServiceBinding({ name: 'ZUI_X_O2', objectType: 'SRVB/SVB' }, { service: 'ZUI_OTHER' }),
+    ).rejects.toThrow(/no service definition ZUI_OTHER \(has: ZUI_X\)/);
+    expect(requests.map((r) => r.method)).not.toContain('adtLs/businessservice/srvb/publishandUnpublishAction');
+  });
+
+  it('refuses to send the action without an OData version (adt-ls would NPE)', async () => {
+    const { svc, requests } = servicesWith({ services: [] });
+    await expect(svc.publishServiceBinding({ name: 'ZUI_X_O4', objectType: 'SRVB/SVB' })).rejects.toThrow(
+      /OData version of service binding ZUI_X_O4/,
+    );
+    expect(requests.map((r) => r.method)).not.toContain('adtLs/businessservice/srvb/publishandUnpublishAction');
+  });
+});

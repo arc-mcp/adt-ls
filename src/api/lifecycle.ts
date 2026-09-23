@@ -554,7 +554,14 @@ export function createLifecycle(deps: LifecycleDeps) {
           objectInfo: { objectUri },
           transportLayer: '',
           isRecordChanges: true,
-        })) as { locks?: Array<{ number?: string }> } | null;
+        })) as {
+          isTransportCheckSuccessful?: boolean;
+          isLockedInRequests?: boolean;
+          locks?: Array<{ number?: string }>;
+        } | null;
+        if (!r || r.isTransportCheckSuccessful === false || (r.isLockedInRequests && !Array.isArray(r.locks))) {
+          throw new Error(`Could not verify the CTS lock for ${args.name}.`);
+        }
         return (r?.locks ?? []).map((l) => l.number?.toUpperCase()).filter((n): n is string => Boolean(n));
       };
       const before = await readLocks();

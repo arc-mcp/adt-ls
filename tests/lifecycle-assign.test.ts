@@ -10,7 +10,11 @@ import type { LspRequester } from '../src/driver.js';
 const URI = 'abap:/repotree-v1/ADTLS/x/zcl_x.clas.abap';
 
 /** `locks[0]` is read before the assign, `locks[1]` after. */
-function lifecycleWith(locks: [string[], string[]], assignResult: unknown = true) {
+function lifecycleWith(
+  locks: [string[], string[]],
+  assignResult: unknown = true,
+  checks: [boolean, boolean] = [true, true],
+) {
   const methods: string[] = [];
   let lockReads = 0;
   const driver: LspRequester = {
@@ -19,8 +23,9 @@ function lifecycleWith(locks: [string[], string[]], assignResult: unknown = true
       if (method === 'adtLs/repository/quickSearch') return { references: [{ name: 'ZCL_X', uri: '/adt/x' }] } as T;
       if (method === 'adtLs/repository/getLsUri') return { uri: URI } as T;
       if (method === 'adtLs/cts/transport/checkTransportForObjectLock') {
-        const numbers = locks[lockReads++] ?? [];
-        return { isTransportCheckSuccessful: true, locks: numbers.map((number) => ({ number })) } as T;
+        const index = lockReads++;
+        const numbers = locks[index] ?? [];
+        return { isTransportCheckSuccessful: checks[index], locks: numbers.map((number) => ({ number })) } as T;
       }
       if (method === 'adtLs/cts/transport/assignTransportToObject') return assignResult as T;
       throw new Error(`unexpected request: ${method}`);
@@ -72,5 +77,21 @@ describe('lifecycle.assignTransport', () => {
     const { lc } = lifecycleWith([[], ['DEVK900001']], false);
     const r = await lc.assignTransport({ ...ref, transport: 'DEVK900001' });
     expect(r.assigned).toBe(false);
+  });
+
+  it('does not assign when the initial lock check failed', async () => {
+    const { lc, methods } = lifecycleWith([[], []], true, [false, true]);
+    await expect(lc.assignTransport({ ...ref, transport: 'DEVK900001' })).rejects.toThrow(
+      'Could not verify the CTS lock for ZCL_X.',
+    );
+    expect(methods).not.toContain('adtLs/cts/transport/assignTransportToObject');
+  });
+
+  it('does not report an assignment when the readback failed', async () => {
+    const { lc, methods } = lifecycleWith([[], ['DEVK900001']], true, [true, false]);
+    await expect(lc.assignTransport({ ...ref, transport: 'DEVK900001' })).rejects.toThrow(
+      'Could not verify the CTS lock for ZCL_X.',
+    );
+    expect(methods).toContain('adtLs/cts/transport/assignTransportToObject');
   });
 });

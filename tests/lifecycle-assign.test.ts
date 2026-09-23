@@ -14,6 +14,7 @@ function lifecycleWith(
   locks: [string[], string[]],
   assignResult: unknown = true,
   checks: [boolean, boolean] = [true, true],
+  lockFlags?: [boolean, boolean],
 ) {
   const methods: string[] = [];
   let lockReads = 0;
@@ -25,7 +26,11 @@ function lifecycleWith(
       if (method === 'adtLs/cts/transport/checkTransportForObjectLock') {
         const index = lockReads++;
         const numbers = locks[index] ?? [];
-        return { isTransportCheckSuccessful: checks[index], locks: numbers.map((number) => ({ number })) } as T;
+        return {
+          isTransportCheckSuccessful: checks[index],
+          ...(lockFlags ? { isLockedInRequests: lockFlags[index] } : {}),
+          locks: numbers.map((number) => ({ number })),
+        } as T;
       }
       if (method === 'adtLs/cts/transport/assignTransportToObject') return assignResult as T;
       throw new Error(`unexpected request: ${method}`);
@@ -93,5 +98,13 @@ describe('lifecycle.assignTransport', () => {
       'Could not verify the CTS lock for ZCL_X.',
     );
     expect(methods).toContain('adtLs/cts/transport/assignTransportToObject');
+  });
+
+  it('rejects a lock check that reports a lock without its request number', async () => {
+    const { lc, methods } = lifecycleWith([[], []], true, [true, true], [true, false]);
+    await expect(lc.assignTransport({ ...ref, transport: 'DEVK900001' })).rejects.toThrow(
+      'Could not verify the CTS lock for ZCL_X.',
+    );
+    expect(methods).not.toContain('adtLs/cts/transport/assignTransportToObject');
   });
 });

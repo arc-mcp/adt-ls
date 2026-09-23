@@ -562,7 +562,11 @@ export function createLifecycle(deps: LifecycleDeps) {
         if (!r || r.isTransportCheckSuccessful === false || (r.isLockedInRequests && !Array.isArray(r.locks))) {
           throw new Error(`Could not verify the CTS lock for ${args.name}.`);
         }
-        return (r?.locks ?? []).map((l) => l.number?.toUpperCase()).filter((n): n is string => Boolean(n));
+        const lockedIn = (r.locks ?? []).map((l) => l.number?.toUpperCase()).filter((n): n is string => Boolean(n));
+        if (r.isLockedInRequests === true && lockedIn.length === 0) {
+          throw new Error(`Could not verify the CTS lock for ${args.name}.`);
+        }
+        return lockedIn;
       };
       const before = await readLocks();
       const raw = await driver.sendRequest('adtLs/cts/transport/assignTransportToObject', {

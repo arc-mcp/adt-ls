@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/arc-mcp/adt-ls/compare/v0.6.0...v0.6.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* use Node 24 for npm trusted publishing ([#21](https://github.com/arc-mcp/adt-ls/issues/21)) ([f9cb9b4](https://github.com/arc-mcp/adt-ls/commit/f9cb9b41277b760782acb1891a1b6f2f0afae4d1))
+
 ## [0.6.0](https://github.com/arc-mcp/adt-ls/compare/v0.5.0...v0.6.0) (2026-09-23)
 
 

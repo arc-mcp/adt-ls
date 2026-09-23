@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0](https://github.com/arc-mcp/adt-ls/compare/v0.5.0...v0.6.0) (2026-09-23)
+
+
+### Features
+
+* support current ADT 1.1.2 runtime contracts ([#8](https://github.com/arc-mcp/adt-ls/issues/8)) ([72f788e](https://github.com/arc-mcp/adt-ls/commit/72f788eaa98611f1c9ab8ea800a1c102d646b32e))
+
+
+### Bug Fixes
+
+* **auth:** send the destination client on ticket requests and honor the default client ([#15](https://github.com/arc-mcp/adt-ls/pull/15), [#16](https://github.com/arc-mcp/adt-ls/pull/16))
+* **lifecycle:** resolve subtyped references through their main type ([#11](https://github.com/arc-mcp/adt-ls/pull/11))
+* **lifecycle:** reject transport backend refusals and incomplete results ([#12](https://github.com/arc-mcp/adt-ls/pull/12), [#18](https://github.com/arc-mcp/adt-ls/pull/18))
+* **services:** publish from binding details and reject empty bindings ([#14](https://github.com/arc-mcp/adt-ls/pull/14), [#17](https://github.com/arc-mcp/adt-ls/pull/17))
+* **transport:** verify assignments against CTS locks and reject failed checks ([#13](https://github.com/arc-mcp/adt-ls/pull/13), [#20](https://github.com/arc-mcp/adt-ls/pull/20))
+
 ## [0.5.0](https://github.com/marianfoo/adt-ls/compare/v0.4.2...v0.5.0) (2026-06-12)
 
 

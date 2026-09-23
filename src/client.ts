@@ -55,7 +55,7 @@ import {
 } from './resilience/session-retry.js';
 
 const execFileP = promisify(execFile);
-const VERSION = '0.5.0'; // x-release-please-version
+const VERSION = '0.6.0'; // x-release-please-version
 const CLIENT_INFO = { name: '@arc-mcp/adt-ls', version: VERSION };
 /** Keep-alive heartbeat cadence + activity window (ADR-0007). */
 const KEEPALIVE_INTERVAL_MS = 180_000;

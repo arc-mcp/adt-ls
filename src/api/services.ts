@@ -121,7 +121,6 @@ export function createServices(deps: ServicesDeps): Services {
       const details = await lsp.sendRequest<{
         odataversion?: string;
         serviceType?: string;
-        srvbName?: string;
         serviceBindingName?: string;
         services?: string[];
       } | null>('adtLs/businessservice/srvb/getServiceBindingDetails', { lsUri });
@@ -144,7 +143,7 @@ export function createServices(deps: ServicesDeps): Services {
         serviceVersion: '',
         bindingType: details?.serviceType ?? '',
         odataVersion,
-        serviceBindingName: details?.srvbName ?? details?.serviceBindingName ?? ref.name,
+        serviceBindingName: details?.serviceBindingName ?? ref.name,
       });
     },
 

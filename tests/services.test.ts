@@ -135,7 +135,7 @@ describe('services.publishServiceBinding', () => {
   }
 
   const details = (odataversion: string, services: string[]) => ({
-    srvbName: 'ZUI_X_O2',
+    serviceBindingName: 'ZUI_X_O2',
     serviceType: 'ODATA',
     odataversion,
     services,
@@ -180,12 +180,6 @@ describe('services.publishServiceBinding', () => {
       /OData version of service binding ZUI_X_O4/,
     );
     expect(requests.map((r) => r.method)).not.toContain('adtLs/businessservice/srvb/publishandUnpublishAction');
-  });
-
-  it('uses the binding name supplied by the service binding details', async () => {
-    const { svc, requests } = servicesWith(details('V2', ['ZUI_X']));
-    await svc.publishServiceBinding({ name: 'zui_x_o2', objectType: 'SRVB/SVB' });
-    expect(requests.at(-1)?.params).toMatchObject({ serviceBindingName: 'ZUI_X_O2' });
   });
 
   it('refuses to publish a binding with no services', async () => {

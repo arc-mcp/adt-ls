@@ -55,7 +55,7 @@ import {
 } from './resilience/session-retry.js';
 
 const execFileP = promisify(execFile);
-const VERSION = '0.5.0'; // x-release-please-version
+const VERSION = '0.6.0'; // x-release-please-version
 const CLIENT_INFO = { name: '@arc-mcp/adt-ls', version: VERSION };
 /** Keep-alive heartbeat cadence + activity window (ADR-0007). */
 const KEEPALIVE_INTERVAL_MS = 180_000;
@@ -193,13 +193,12 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
     // 3. Destination + logon (only when connecting).
     let connected = false;
     if (conn && auth && destId) {
-      const destinationClient = conn.client ?? '001';
-      auth.register(activeDriver, { insecure, client: destinationClient });
+      auth.register(activeDriver, { insecure, client: conn.client });
       await createDestination(activeDriver, {
         id: destId,
         systemUrl,
         user: auth.user,
-        client: destinationClient,
+        client: conn.client,
         language: conn.language,
       });
       const logon = await ensureLoggedOn(activeDriver, destId);

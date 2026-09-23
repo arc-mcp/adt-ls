@@ -10,8 +10,9 @@ import type { LspRequester } from '../src/driver.js';
 const LS_URI = 'abap:/repotree-v1/ADTLS/x/zui_x.srvd.asrvd';
 
 /** A fake search index: `types[0]` → hits. Records every searched type. */
-function lifecycleWithIndex(index: Record<string, Array<{ name: string; uri: string }>>) {
+function lifecycleWithIndex(index: Record<string, Array<{ name: string; uri: string; type?: string }>>) {
   const searched: string[] = [];
+  const resolvedUris: string[] = [];
   const driver: LspRequester = {
     sendRequest: async <T>(method: string, params?: unknown): Promise<T> => {
       if (method === 'adtLs/repository/quickSearch') {
@@ -19,12 +20,15 @@ function lifecycleWithIndex(index: Record<string, Array<{ name: string; uri: str
         searched.push(type);
         return { references: index[type] ?? [] } as T;
       }
-      if (method === 'adtLs/repository/getLsUri') return { uri: LS_URI } as T;
+      if (method === 'adtLs/repository/getLsUri') {
+        resolvedUris.push((params as { adtUri: string }).adtUri);
+        return { uri: LS_URI } as T;
+      }
       throw new Error(`unexpected request: ${method}`);
     },
   };
   const lc = createLifecycle({ driver, callTool: async () => ({}), destination: () => 'ADTLS' });
-  return { lc, searched };
+  return { lc, searched, resolvedUris };
 }
 
 const hit = { name: 'ZUI_X', uri: '/sap/bc/adt/ddic/srvd/sources/zui_x' };
@@ -48,6 +52,17 @@ describe('lifecycle.resolveAffUri', () => {
     await expect(lc.resolveAffUri({ name: 'ZUI_X', objectType: 'SRVD/SRV' })).rejects.toThrow(
       'Object ZUI_X (SRVD/SRV) not found via search.',
     );
+  });
+
+  it('ignores a same-name hit from a different subtype in the main-type search', async () => {
+    const { lc, resolvedUris } = lifecycleWithIndex({
+      SRVD: [
+        { name: 'ZUI_X', uri: '/wrong', type: 'SRVD/OTHER' },
+        { name: 'ZUI_X', uri: hit.uri, type: 'SRVD/SRV' },
+      ],
+    });
+    await expect(lc.resolveAffUri({ name: 'ZUI_X', objectType: 'SRVD/SRV' })).resolves.toBe(LS_URI);
+    expect(resolvedUris).toEqual([hit.uri]);
   });
 
   it('does not retry when the typed search had hits, just not this name', async () => {

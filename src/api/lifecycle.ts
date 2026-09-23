@@ -130,7 +130,14 @@ export function createLifecycle(deps: LifecycleDeps) {
     const doSearch = (type: string) =>
       quickSearch(driver, { destination: d, pattern: ref.name, maxResults: 20, types: [type] }, { cold: true });
     const findHit = (references: SearchReference[]) =>
-      references.find((r) => r.name?.toUpperCase() === ref.name.toUpperCase() && r.uri);
+      references.find(
+        (r) =>
+          r.name?.toUpperCase() === ref.name.toUpperCase() &&
+          r.uri &&
+          // A main-type search can return a different subtype with the same name.
+          // Some backends report only the main type; keep those eligible.
+          (!r.type?.includes('/') || r.type.toUpperCase() === ref.objectType.toUpperCase()),
+      );
     let { references } = await doSearch(ref.objectType);
     // Empty after cold-retry can also mean the SAP session DIED (idle-expired) — adt-ls
     // returns [] rather than "logged off". Probe + re-logon, then search once more before

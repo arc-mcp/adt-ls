@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LogonContext } from '../src/auth/strategy.js';
 
 const mocks = vi.hoisted(() => ({
   start: vi.fn(),
@@ -59,5 +60,30 @@ describe('client startup cleanup', () => {
       /connection and auth together/,
     );
     expect(mocks.dataDirs).toEqual([]);
+  });
+
+  it('uses the destination default client for the logon handler too', async () => {
+    let logonContext: LogonContext | undefined;
+    mocks.request.mockImplementation(async (method: string) => {
+      if (method === 'adtLs/destinations/create') throw new Error('stop after destination creation');
+      return {};
+    });
+    await expect(
+      createAdtLs({
+        adtLs: { path: process.execPath },
+        connection: { systemUrl: 'https://example.test' },
+        auth: {
+          kind: 'custom',
+          register: (_driver, ctx) => {
+            logonContext = ctx;
+          },
+        },
+      }),
+    ).rejects.toThrow('stop after destination creation');
+    expect(mocks.request).toHaveBeenCalledWith(
+      'adtLs/destinations/create',
+      expect.objectContaining({ properties: expect.objectContaining({ client: '001' }) }),
+    );
+    expect(logonContext?.client).toBe('001');
   });
 });

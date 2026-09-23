@@ -538,10 +538,15 @@ export interface AdtLsClient {
       objectName: string;
       objectType: string;
     }): Promise<unknown>;
-    /** Assign an existing transport to an object. */
-    assign(
-      args: ObjectRef & { transport: string },
-    ): Promise<{ assigned: boolean; object: string; objectType: string; transport: string }>;
+    /** Assign an existing transport to an object. `assigned` is confirmed by reading the
+     * object's CTS lock back (`lockedIn` = the request(s) it names afterwards). */
+    assign(args: ObjectRef & { transport: string }): Promise<{
+      assigned: boolean;
+      object: string;
+      objectType: string;
+      transport: string;
+      lockedIn: string[];
+    }>;
     /** List your modifiable transports (capped + filterable). */
     list(opts?: { limit?: number; query?: string }): Promise<unknown>;
     /** Transport decision oracle: does this op need a transport, which are assignable, is it

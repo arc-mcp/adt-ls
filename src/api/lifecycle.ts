@@ -129,14 +129,14 @@ export function createLifecycle(deps: LifecycleDeps) {
     const d = dest();
     const doSearch = (type: string) =>
       quickSearch(driver, { destination: d, pattern: ref.name, maxResults: 20, types: [type] }, { cold: true });
-    const findHit = (references: SearchReference[]) =>
+    const findHit = (references: SearchReference[], fromMainType = false) =>
       references.find(
         (r) =>
           r.name?.toUpperCase() === ref.name.toUpperCase() &&
           r.uri &&
           // A main-type search can return a different subtype with the same name.
           // Some backends report only the main type; keep those eligible.
-          (!r.type?.includes('/') || r.type.toUpperCase() === ref.objectType.toUpperCase()),
+          (!fromMainType || !r.type?.includes('/') || r.type.toUpperCase() === ref.objectType.toUpperCase()),
       );
     let { references } = await doSearch(ref.objectType);
     // Empty after cold-retry can also mean the SAP session DIED (idle-expired) — adt-ls
@@ -153,7 +153,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     // exact-name match still applies.
     const mainType = ref.objectType.split('/')[0];
     if (references.length === 0 && mainType && mainType !== ref.objectType) {
-      hit = findHit((await doSearch(mainType)).references);
+      hit = findHit((await doSearch(mainType)).references, true);
     }
     if (!hit?.uri) {
       throw new Error(`Object ${ref.name} (${ref.objectType}) not found via search.`);

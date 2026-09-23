@@ -104,9 +104,12 @@ describe('cert/truststore build (needs openssl + adt-ls JRE)', () => {
     const cert = await generateLocalhostCert(dir);
     const out = path.join(dir, 'truststore.p12');
     await buildTruststore({ keytool, cacerts, certPath: cert.certPath, outPath: out });
-    const listing = execFileSync(keytool, ['-list', '-keystore', out, '-storepass', 'changeit'], {
-      encoding: 'utf8',
-    });
+    // Pin keytool's locale: the entry-count line below is localized (e.g. German on a de_DE host).
+    const listing = execFileSync(
+      keytool,
+      ['-J-Duser.language=en', '-J-Duser.country=US', '-list', '-keystore', out, '-storepass', 'changeit'],
+      { encoding: 'utf8' },
+    );
     expect(listing).toContain(PROXY_CERT_ALIAS);
     expect(listing).toMatch(/Your keystore contains \d+ entries/);
   });

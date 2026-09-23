@@ -397,18 +397,23 @@ export function createLifecycle(deps: LifecycleDeps) {
         isCreation: args.isCreation,
       });
       const { ok, data, text } = parseFederated(res);
-      // A real answer is always a JSON object; SAP's refusal ("… is locked in task … not
-      // specified for this client", verified live) arrives as plain text. Check the raw
-      // text too: parseFederated can fall back to structuredContent when the text is not JSON.
-      let rawData: unknown = data;
-      if (text) {
-        try {
-          rawData = JSON.parse(text);
-        } catch {
-          rawData = text;
-        }
-      }
-      if (!ok || !rawData || typeof rawData !== 'object' || Array.isArray(rawData)) {
+      // A successful tool response may have explanatory plain text and the result in
+      // structuredContent. Require the fields in the tool's output schema so an unflagged
+      // refusal does not become a successful, incomplete object.
+      const result = data as {
+        isRecordingRequired?: unknown;
+        transportRequests?: unknown;
+        informationMessages?: unknown;
+      } | null;
+      if (
+        !ok ||
+        !result ||
+        typeof result !== 'object' ||
+        Array.isArray(result) ||
+        typeof result.isRecordingRequired !== 'boolean' ||
+        !Array.isArray(result.transportRequests) ||
+        !Array.isArray(result.informationMessages)
+      ) {
         throw new Error(`find_transport failed: ${text}`);
       }
       return data;

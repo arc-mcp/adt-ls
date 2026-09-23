@@ -6,6 +6,7 @@ import { deleteFile, getInactiveObjects } from '../src/api/repository.js';
 import type { LspRequester } from '../src/driver.js';
 
 const payload = (data: unknown) => ({ content: [{ text: JSON.stringify(data) }] });
+const transportResult = { isRecordingRequired: false, transportRequests: [], informationMessages: [] };
 function setup() {
   const sendRequest = vi.fn(async <T>(method: string): Promise<T> => {
     if (method.endsWith('quickSearch')) return { references: [{ name: 'ZCL_TEST', uri: '/test' }] } as T;
@@ -106,6 +107,7 @@ describe('MCP requests against the captured SAP 1.1.2 schemas', () => {
     await lc.getGeneratorSchema('example');
     await lc.generateObjects({ generatorId: 'example', content: '{}', packageName: '$TMP' });
     await lc.runUnitTests(ref);
+    callTool.mockResolvedValueOnce(payload(transportResult));
     await lc.findTransport({
       objectName: ref.name,
       objectType: ref.objectType,
@@ -144,8 +146,8 @@ describe('lifecycle.findTransport', () => {
 
   it('returns the parsed answer', async () => {
     const { lc, callTool } = setup();
-    callTool.mockResolvedValueOnce(payload({ isRecordingRequired: false }));
-    await expect(lc.findTransport(args)).resolves.toEqual({ isRecordingRequired: false });
+    callTool.mockResolvedValueOnce(payload(transportResult));
+    await expect(lc.findTransport(args)).resolves.toEqual(transportResult);
   });
 
   it('throws on a tool error', async () => {
@@ -160,12 +162,22 @@ describe('lifecycle.findTransport', () => {
     await expect(lc.findTransport(args)).rejects.toThrow(`find_transport failed: ${refusal}`);
   });
 
-  it('does not treat structuredContent as success when the raw text is a refusal', async () => {
+  it('rejects an incomplete structuredContent result alongside a refusal', async () => {
     const { lc, callTool } = setup();
     callTool.mockResolvedValueOnce({
       content: [{ text: refusal }],
       structuredContent: { isRecordingRequired: false },
     });
     await expect(lc.findTransport(args)).rejects.toThrow(`find_transport failed: ${refusal}`);
+  });
+
+  it('accepts explanatory plain text alongside a valid structuredContent result', async () => {
+    const { lc, callTool } = setup();
+    callTool.mockResolvedValueOnce({
+      content: [{ text: 'A new transport request can also be created.' }],
+      structuredContent: transportResult,
+      isError: false,
+    });
+    await expect(lc.findTransport(args)).resolves.toEqual(transportResult);
   });
 });

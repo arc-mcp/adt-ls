@@ -137,3 +137,26 @@ describe('MCP requests against the captured SAP 1.1.2 schemas', () => {
     }
   });
 });
+
+describe('lifecycle.findTransport', () => {
+  const args = { objectName: 'ZR_X', objectType: 'BDEF/BDO', developmentPackage: 'ZTEST', isCreation: false };
+  const refusal = 'Object ZR_X is locked in task DEVK900002, which is not specified for this client';
+
+  it('returns the parsed answer', async () => {
+    const { lc, callTool } = setup();
+    callTool.mockResolvedValueOnce(payload({ isRecordingRequired: false }));
+    await expect(lc.findTransport(args)).resolves.toEqual({ isRecordingRequired: false });
+  });
+
+  it('throws on a tool error', async () => {
+    const { lc, callTool } = setup();
+    callTool.mockResolvedValueOnce({ content: [{ text: refusal }], isError: true });
+    await expect(lc.findTransport(args)).rejects.toThrow(`find_transport failed: ${refusal}`);
+  });
+
+  it('throws on a plain-text refusal the tool did not flag as an error', async () => {
+    const { lc, callTool } = setup();
+    callTool.mockResolvedValueOnce({ content: [{ text: refusal }] });
+    await expect(lc.findTransport(args)).rejects.toThrow(`find_transport failed: ${refusal}`);
+  });
+});

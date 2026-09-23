@@ -380,7 +380,8 @@ export function createLifecycle(deps: LifecycleDeps) {
 
     /**
      * Find the transport request(s) relevant to creating/changing ONE object (read-only
-     * validation, object-scoped — not a system transport list).
+     * validation, object-scoped — not a system transport list). Throws on a backend
+     * refusal (e.g. the object is locked in another client's task).
      */
     async findTransport(args: {
       objectName: string;
@@ -395,7 +396,11 @@ export function createLifecycle(deps: LifecycleDeps) {
         developmentPackage: args.developmentPackage,
         isCreation: args.isCreation,
       });
-      return parseFederated(res).data;
+      const { ok, data, text } = parseFederated(res);
+      // A real answer is always a JSON object; SAP's refusal ("… is locked in task … not
+      // specified for this client", verified live) arrives as plain text.
+      if (!ok || typeof data === 'string') throw new Error(`find_transport failed: ${text}`);
+      return data;
     },
 
     /** One page of unified diffs; return the server cursor verbatim for the next call. */

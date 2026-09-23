@@ -193,12 +193,13 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
     // 3. Destination + logon (only when connecting).
     let connected = false;
     if (conn && auth && destId) {
-      auth.register(activeDriver, { insecure, client: conn.client });
+      const destinationClient = conn.client ?? '001';
+      auth.register(activeDriver, { insecure, client: destinationClient });
       await createDestination(activeDriver, {
         id: destId,
         systemUrl,
         user: auth.user,
-        client: conn.client,
+        client: destinationClient,
         language: conn.language,
       });
       const logon = await ensureLoggedOn(activeDriver, destId);

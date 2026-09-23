@@ -121,6 +121,7 @@ export function createServices(deps: ServicesDeps): Services {
       const details = await lsp.sendRequest<{
         odataversion?: string;
         serviceType?: string;
+        srvbName?: string;
         serviceBindingName?: string;
         services?: string[];
       } | null>('adtLs/businessservice/srvb/getServiceBindingDetails', { lsUri });
@@ -129,6 +130,9 @@ export function createServices(deps: ServicesDeps): Services {
         throw new Error(`Could not read the OData version of service binding ${ref.name}; adt-ls needs it to publish.`);
       }
       const services = details?.services ?? [];
+      if (services.length === 0) {
+        throw new Error(`No OData service found in binding ${ref.name}.`);
+      }
       if (opts.service && !services.includes(opts.service)) {
         throw new Error(
           `Service binding ${ref.name} has no service definition ${opts.service} (has: ${services.join(', ') || 'none'}).`,
@@ -140,7 +144,7 @@ export function createServices(deps: ServicesDeps): Services {
         serviceVersion: '',
         bindingType: details?.serviceType ?? '',
         odataVersion,
-        serviceBindingName: details?.serviceBindingName ?? ref.name,
+        serviceBindingName: details?.srvbName ?? details?.serviceBindingName ?? ref.name,
       });
     },
 

@@ -181,4 +181,12 @@ describe('services.publishServiceBinding', () => {
     );
     expect(requests.map((r) => r.method)).not.toContain('adtLs/businessservice/srvb/publishandUnpublishAction');
   });
+
+  it('refuses to publish a binding with no services', async () => {
+    const { svc, requests } = servicesWith(details('V4', []));
+    await expect(svc.publishServiceBinding({ name: 'ZUI_X_O2', objectType: 'SRVB/SVB' })).rejects.toThrow(
+      'No OData service found in binding ZUI_X_O2.',
+    );
+    expect(requests.map((r) => r.method)).not.toContain('adtLs/businessservice/srvb/publishandUnpublishAction');
+  });
 });

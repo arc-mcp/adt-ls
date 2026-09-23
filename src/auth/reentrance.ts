@@ -120,9 +120,23 @@ function httpGet(
 }
 
 /**
+ * Add `sap-client` to a reentrance logon URL that lacks it. adt-ls's `logonUrl` carries no
+ * client, so the ticket GET authenticates against the backend's default client and fails
+ * (401) for a user that only exists in the destination's client (verified live on 1.1.2).
+ */
+export function withSapClient(logonUrl: string, client?: string): string {
+  if (!client) return logonUrl;
+  const u = new URL(logonUrl);
+  if (u.searchParams.has('sap-client')) return logonUrl;
+  u.searchParams.set('sap-client', client);
+  return u.toString();
+}
+
+/**
  * Emulate the browser reentrance flow: GET logonUrl with the credential → 307 +
  * reentrance-ticket in Location → deliver it to adt-ls's local 127.0.0.1 listener.
  * `insecure` skips TLS verification when WE call the proxy/backend (self-signed).
+ * `client` is appended as `sap-client` when the logon URL has none (see `withSapClient`).
  * `creds` is OPTIONAL — omit it for X.509 client-certificate auth, where the TLS layer
  * (a cert-presenting reverse proxy) authenticates the GET and the backend issues the
  * ticket for the cert-mapped user, so no Authorization header is sent.
@@ -130,9 +144,12 @@ function httpGet(
 export async function performReentranceLogon(
   logonUrl: string,
   creds?: LogonCredentials,
-  opts: { insecure?: boolean } = {},
+  opts: { insecure?: boolean; client?: string } = {},
 ): Promise<void> {
-  const r1 = await httpGet(logonUrl, { headers: authHeader(creds), insecure: opts.insecure });
+  const r1 = await httpGet(withSapClient(logonUrl, opts.client), {
+    headers: authHeader(creds),
+    insecure: opts.insecure,
+  });
   if (!r1.location) {
     throw new Error(`reentrance: no redirect Location (status ${r1.status}) from ${logonUrl}`);
   }
@@ -148,7 +165,7 @@ export async function performReentranceLogon(
  */
 export function makeReentranceLogonHandler(
   creds?: LogonCredentials,
-  opts: { insecure?: boolean } = {},
+  opts: { insecure?: boolean; client?: string } = {},
 ): ServerRequestHandler {
   return (params: unknown) => {
     const logonUrl = extractLogonUrl(params);

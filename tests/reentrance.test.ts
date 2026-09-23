@@ -9,6 +9,7 @@ import {
   initializeDestinationsService,
   makeReentranceLogonHandler,
   performReentranceLogon,
+  withSapClient,
 } from '../src/auth/reentrance.js';
 import type { LspRequester } from '../src/driver.js';
 
@@ -139,6 +140,28 @@ describe('performReentranceLogon (browser emulation)', () => {
     expect(delivered).toBe(true);
   });
 
+  it('adds the destination client as sap-client to the ticket GET', async () => {
+    let sawQuery: URLSearchParams | undefined;
+    const deliverPort = await listen((_req, res) => {
+      res.writeHead(302, { location: '/done' });
+      res.end();
+    });
+    const logonPort = await listen((req, res) => {
+      sawQuery = new URL(req.url ?? '', 'http://x').searchParams;
+      res.writeHead(307, { location: `http://localhost:${deliverPort}/adt/redirect?reentrance-ticket=T` });
+      res.end();
+    });
+
+    await performReentranceLogon(
+      `http://127.0.0.1:${logonPort}/reentranceticket?redirect-url=x`,
+      { kind: 'basic', user: 'u', password: 'p' },
+      { client: '100' },
+    );
+
+    expect(sawQuery?.get('sap-client')).toBe('100');
+    expect(sawQuery?.get('redirect-url')).toBe('x');
+  });
+
   it('throws when the logon URL returns no redirect Location', async () => {
     const port = await listen((_req, res) => {
       res.writeHead(401);
@@ -160,5 +183,24 @@ describe('makeReentranceLogonHandler', () => {
   it('returns false when no logonUrl is found', () => {
     const handler = makeReentranceLogonHandler({ kind: 'basic', user: 'u', password: 'p' });
     expect(handler({ params: [] })).toBe(false);
+  });
+});
+
+describe('withSapClient', () => {
+  const url = 'https://localhost:5000/sap/bc/adt/core/http/reentranceticket?redirect-url=http%3A%2F%2Flocalhost%3A6000';
+
+  it('appends sap-client and keeps the other parameters', () => {
+    const u = new URL(withSapClient(url, '100'));
+    expect(u.searchParams.get('sap-client')).toBe('100');
+    expect(u.searchParams.get('redirect-url')).toBe('http://localhost:6000');
+  });
+
+  it('leaves a URL that already names a client alone', () => {
+    const withClient = `${url}&sap-client=100`;
+    expect(withSapClient(withClient, '100')).toBe(withClient);
+  });
+
+  it('leaves the URL unchanged without a client', () => {
+    expect(withSapClient(url, undefined)).toBe(url);
   });
 });

@@ -398,8 +398,19 @@ export function createLifecycle(deps: LifecycleDeps) {
       });
       const { ok, data, text } = parseFederated(res);
       // A real answer is always a JSON object; SAP's refusal ("… is locked in task … not
-      // specified for this client", verified live) arrives as plain text.
-      if (!ok || typeof data === 'string') throw new Error(`find_transport failed: ${text}`);
+      // specified for this client", verified live) arrives as plain text. Check the raw
+      // text too: parseFederated can fall back to structuredContent when the text is not JSON.
+      let rawData: unknown = data;
+      if (text) {
+        try {
+          rawData = JSON.parse(text);
+        } catch {
+          rawData = text;
+        }
+      }
+      if (!ok || !rawData || typeof rawData !== 'object' || Array.isArray(rawData)) {
+        throw new Error(`find_transport failed: ${text}`);
+      }
       return data;
     },
 

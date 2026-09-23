@@ -159,4 +159,13 @@ describe('lifecycle.findTransport', () => {
     callTool.mockResolvedValueOnce({ content: [{ text: refusal }] });
     await expect(lc.findTransport(args)).rejects.toThrow(`find_transport failed: ${refusal}`);
   });
+
+  it('does not treat structuredContent as success when the raw text is a refusal', async () => {
+    const { lc, callTool } = setup();
+    callTool.mockResolvedValueOnce({
+      content: [{ text: refusal }],
+      structuredContent: { isRecordingRequired: false },
+    });
+    await expect(lc.findTransport(args)).rejects.toThrow(`find_transport failed: ${refusal}`);
+  });
 });

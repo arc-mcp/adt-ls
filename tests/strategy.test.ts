@@ -1,3 +1,4 @@
+import http from 'node:http';
 import net, { type AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { LSP_REQUEST_BROWSER_LOGON, LSP_REQUEST_LOGON_INPUT } from '../src/auth/reentrance.js';
@@ -122,5 +123,27 @@ describe('LogonStrategy', () => {
     expect(s.user).toBe('U');
     s.register(reg, {});
     expect(reg.handlers.x({})).toBe(1);
+  });
+});
+
+describe('LogonStrategy client', () => {
+  it('basic sends the destination client as sap-client on the ticket GET', async () => {
+    const seen = new Promise<string | null>((resolve) => {
+      const server = http.createServer((req, res) => {
+        resolve(new URL(req.url ?? '', 'http://x').searchParams.get('sap-client'));
+        res.writeHead(401);
+        res.end();
+        server.close();
+      });
+      server.listen(0, '127.0.0.1', () => {
+        const { port } = server.address() as AddressInfo;
+        const reg = fakeRegistrar();
+        basic('U', 'pw').register(reg, { client: '100' });
+        reg.handlers[LSP_REQUEST_BROWSER_LOGON]({
+          params: [{ field: { key: 'logonUrl', value: `http://127.0.0.1:${port}/reentranceticket` } }],
+        });
+      });
+    });
+    await expect(seen).resolves.toBe('100');
   });
 });

@@ -35,6 +35,9 @@ export interface LogonHandlerRegistrar {
 export interface LogonContext {
   /** Skip TLS verification when our handler calls the proxy/backend (self-signed). */
   insecure?: boolean;
+  /** The destination's SAP client; the headless strategies (basic, bearer, clientCert) append
+   *  it as `sap-client` to a logon URL that lacks it. */
+  client?: string;
 }
 
 export interface LogonStrategy {
@@ -58,7 +61,7 @@ export function basic(user: string, password: string): LogonStrategy {
     register(driver, ctx) {
       driver.setRequestHandler(
         LSP_REQUEST_BROWSER_LOGON,
-        makeReentranceLogonHandler({ kind: 'basic', user, password }, { insecure: ctx.insecure }),
+        makeReentranceLogonHandler({ kind: 'basic', user, password }, { insecure: ctx.insecure, client: ctx.client }),
       );
     },
   };
@@ -79,7 +82,11 @@ export function bearer(token: string | (() => string | Promise<string>), opts: {
         }
         void (async () => {
           const t = typeof token === 'function' ? await token() : token;
-          await performReentranceLogon(logonUrl, { kind: 'bearer', token: t }, { insecure: ctx.insecure });
+          await performReentranceLogon(
+            logonUrl,
+            { kind: 'bearer', token: t },
+            { insecure: ctx.insecure, client: ctx.client },
+          );
         })().catch((e) => logger.warn(`bearer reentrance logon failed: ${e instanceof Error ? e.message : String(e)}`));
         return true; // fire-and-forget
       });
@@ -106,7 +113,7 @@ export function clientCert(opts: { cert: string | Buffer; key: string | Buffer; 
     register(driver, ctx) {
       driver.setRequestHandler(
         LSP_REQUEST_BROWSER_LOGON,
-        makeReentranceLogonHandler(undefined, { insecure: ctx.insecure }),
+        makeReentranceLogonHandler(undefined, { insecure: ctx.insecure, client: ctx.client }),
       );
     },
   };

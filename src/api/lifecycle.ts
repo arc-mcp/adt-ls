@@ -13,6 +13,7 @@ import type { LspRequester } from '../driver.js';
 import { isTransientColdError, withColdRetry } from '../resilience/cold-retry.js';
 import { withWriteRetry } from '../resilience/session-retry.js';
 import {
+  type SearchReference,
   deleteFile,
   getLsUri,
   includeAffUri,
@@ -126,21 +127,27 @@ export function createLifecycle(deps: LifecycleDeps) {
   /** Resolve {name, objectType} → repotree AFF URI (search → getLsUri). */
   async function resolveAffUri(ref: ObjectRef): Promise<string> {
     const d = dest();
-    const doSearch = () =>
-      quickSearch(
-        driver,
-        { destination: d, pattern: ref.name, maxResults: 20, types: [ref.objectType] },
-        { cold: true },
-      );
-    let { references } = await doSearch();
+    const doSearch = (type: string) =>
+      quickSearch(driver, { destination: d, pattern: ref.name, maxResults: 20, types: [type] }, { cold: true });
+    const findHit = (references: SearchReference[]) =>
+      references.find((r) => r.name?.toUpperCase() === ref.name.toUpperCase() && r.uri);
+    let { references } = await doSearch(ref.objectType);
     // Empty after cold-retry can also mean the SAP session DIED (idle-expired) — adt-ls
     // returns [] rather than "logged off". Probe + re-logon, then search once more before
     // declaring "not found". A genuinely-absent object: the probe finds the session alive
     // → no re-logon → we fall through to the not-found error below.
     if (references.length === 0 && deps.reviveIfDead && (await deps.reviveIfDead())) {
-      ({ references } = await doSearch());
+      ({ references } = await doSearch(ref.objectType));
     }
-    const hit = references.find((r) => r.name?.toUpperCase() === ref.name.toUpperCase() && r.uri);
+    let hit = findHit(references);
+    // The search's type filter misses some subtyped refs (verified live on 1.1.2: `SRVD/SRV`
+    // and `BDEF/BDO` find nothing, while the bare `SRVD` / `BDEF` finds the same object).
+    // Retry once with the main type, only when the typed search found nothing at all; the
+    // exact-name match still applies.
+    const mainType = ref.objectType.split('/')[0];
+    if (references.length === 0 && mainType && mainType !== ref.objectType) {
+      hit = findHit((await doSearch(mainType)).references);
+    }
     if (!hit?.uri) {
       throw new Error(`Object ${ref.name} (${ref.objectType}) not found via search.`);
     }

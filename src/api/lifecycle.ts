@@ -531,19 +531,43 @@ export function createLifecycle(deps: LifecycleDeps) {
     /**
      * Assign an existing CTS transport to an object — the native lock→transport step that
      * has NO federated (abap_transport-*) equivalent. `$TMP`/local objects need no transport.
-     * adt-ls returns a bare boolean; wrap it in a structured result.
+     *
+     * adt-ls answers `true` even for a transport that does not exist (verified live on
+     * 1.1.2: nothing changed on SAP), so `assigned` is decided by reading the object's CTS
+     * lock before and after. It is `true` when the lock now names `transport`, or when the
+     * object was unlocked and now has a lock (a task number: the lock names its request).
+     * `lockedIn` lists the request(s) the lock names afterwards. Assigning a task of the
+     * request that already locks the object cannot be told apart from a no-op and reports
+     * `false` — compare `lockedIn` with the task's request.
      */
-    async assignTransport(
-      args: ObjectRef & { transport: string },
-    ): Promise<{ assigned: boolean; object: string; objectType: string; transport: string }> {
+    async assignTransport(args: ObjectRef & { transport: string }): Promise<{
+      assigned: boolean;
+      object: string;
+      objectType: string;
+      transport: string;
+      lockedIn: string[];
+    }> {
       const objectUri = await resolveAffUri(args);
+      const readLocks = async (): Promise<string[]> => {
+        const r = (await driver.sendRequest('adtLs/cts/transport/checkTransportForObjectLock', {
+          operationType: 'MODIFY',
+          objectInfo: { objectUri },
+          transportLayer: '',
+          isRecordChanges: true,
+        })) as { locks?: Array<{ number?: string }> } | null;
+        return (r?.locks ?? []).map((l) => l.number?.toUpperCase()).filter((n): n is string => Boolean(n));
+      };
+      const before = await readLocks();
       const raw = await driver.sendRequest('adtLs/cts/transport/assignTransportToObject', {
         objectUri,
         transport: args.transport,
       });
       const obj = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : null;
-      const assigned = raw === true || obj?.assigned === true || obj?.operationExecuted === true;
-      return { assigned, object: args.name, objectType: args.objectType, transport: args.transport };
+      const executed = raw === true || obj?.assigned === true || obj?.operationExecuted === true;
+      const lockedIn = await readLocks();
+      const assigned =
+        executed && lockedIn.length > 0 && (lockedIn.includes(args.transport.toUpperCase()) || before.length === 0);
+      return { assigned, object: args.name, objectType: args.objectType, transport: args.transport, lockedIn };
     },
   };
 }

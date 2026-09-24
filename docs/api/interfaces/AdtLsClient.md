@@ -124,6 +124,23 @@ Delete by AFF URI (use the `.json` metadata URI for objects).
 
 `Promise`\<`unknown`\>
 
+#### readDirectory()
+
+> **readDirectory**(`uri`): `Promise`\<[`DirectoryEntry`](DirectoryEntry.md)[]\>
+
+List a repotree directory's children. Pass a directory URI: a file URI answers `[]`
+(for a package, drop the last segment of its `getLsUri` file URI).
+
+##### Parameters
+
+###### uri
+
+`string`
+
+##### Returns
+
+`Promise`\<[`DirectoryEntry`](DirectoryEntry.md)[]\>
+
 #### listInactive()
 
 > **listInactive**(): `Promise`\<`unknown`[]\>

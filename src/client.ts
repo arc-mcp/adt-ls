@@ -30,11 +30,12 @@ import {
   getLsUri,
   getUsers,
   quickSearch,
+  readDirectory,
   readFile,
   searchWithRevive,
   writeFile,
 } from './api/repository.js';
-import type { QuickSearchResult, UserRef } from './api/repository.js';
+import type { DirectoryEntry, QuickSearchResult, UserRef } from './api/repository.js';
 import { createServices } from './api/services.js';
 import type { Services } from './api/services.js';
 import { createDestination, ensureLoggedOn, getLogonInfo, initializeDestinationsService } from './auth/reentrance.js';
@@ -361,6 +362,7 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
         getUsers: () => getUsers(active, requireDest()),
         getLsUri: (adtUri: string) => getLsUri(active, requireDest(), adtUri),
         readFile: (uri: string) => readFile(active, uri),
+        readDirectory: (uri: string) => readDirectory(active, uri),
         writeFile: (uri: string, content: string) => writeFile(active, uri, content),
         delete: (uri: string) => deleteFile(active, uri),
         listInactive: () => getInactiveObjects(active, requireDest()),
@@ -444,6 +446,9 @@ export interface AdtLsClient {
     getLsUri(adtUri: string): Promise<string>;
     /** Read an AFF file's content by repotree URI. */
     readFile(uri: string): Promise<string>;
+    /** List a repotree directory's children. Pass a directory URI: a file URI answers `[]`
+     * (for a package, drop the last segment of its `getLsUri` file URI). */
+    readDirectory(uri: string): Promise<DirectoryEntry[]>;
     /** Write an AFF file (plain multi-line source) by repotree URI. */
     writeFile(uri: string, content: string): Promise<unknown>;
     /** Delete by AFF URI (use the `.json` metadata URI for objects). */

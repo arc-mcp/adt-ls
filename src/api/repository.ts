@@ -93,6 +93,28 @@ export function writeFile(driver: LspRequester, uri: string, content: string): P
   return driver.sendRequest('adtLs/fileSystem/writeFile', { uri, content });
 }
 
+/** One child of a repotree directory. */
+export interface DirectoryEntry {
+  name: string;
+  kind: 'file' | 'directory';
+}
+
+/**
+ * List a repotree directory's children (`fileSystem/readDirectory`). Pass a DIRECTORY URI:
+ * for a package, that is its `getLsUri` file URI minus the last segment. On a file URI
+ * adt-ls answers `[]` without an error, which reads like an empty package. Below a package
+ * are localized category folders (they differ per system), then type folders, then one
+ * directory per object holding its source files.
+ */
+export async function readDirectory(driver: LspRequester, uri: string): Promise<DirectoryEntry[]> {
+  const r = await driver.sendRequest<{ children?: Array<{ name: string; type: number }> }>(
+    'adtLs/fileSystem/readDirectory',
+    { uri },
+  );
+  // `type` is VS Code's FileType: 1 file, 2 directory.
+  return (r.children ?? []).map((c) => ({ name: c.name, kind: c.type === 2 ? 'directory' : 'file' }));
+}
+
 /** Delete the enclosing object via its AFF metadata (`.json`) URI.
  * `force` confirms whole-object deletion (required by 1.1.2, error 1003 otherwise). */
 export function deleteFile(driver: LspRequester, uri: string): Promise<unknown> {

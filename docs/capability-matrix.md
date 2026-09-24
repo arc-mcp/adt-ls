@@ -16,6 +16,7 @@ one serves a call. Raw access: `adt.raw.tool(name,args)` (MCP) and
 | `repository.getUsers()` | LSP | `adtLs/repository/getUsers` |
 | `repository.getLsUri(adtUri)` | LSP | `adtLs/repository/getLsUri` |
 | `repository.readFile / writeFile / delete` | LSP | `adtLs/fileSystem/{readFile,writeFile,delete}` |
+| `repository.readDirectory(uri)` | LSP | `adtLs/fileSystem/readDirectory` (directory URI; a file URI answers `[]`) |
 | `repository.listInactive()` | LSP | `adtLs/activation/getInactiveObjects` |
 | `source.read(ref)` | LSP | resolve → `fileSystem/readFile` |
 | `lifecycle.create(ref)` | MCP | `abap_creation-create_object` |

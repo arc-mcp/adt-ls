@@ -16,6 +16,7 @@
 - [TextEdit](interfaces/TextEdit.md)
 - [SemanticTokensLegend](interfaces/SemanticTokensLegend.md)
 - [DecodedToken](interfaces/DecodedToken.md)
+- [DirectoryEntry](interfaces/DirectoryEntry.md)
 - [Navigation](interfaces/Navigation.md)
 - [Quality](interfaces/Quality.md)
 - [SearchReference](interfaces/SearchReference.md)

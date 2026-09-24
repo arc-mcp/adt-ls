@@ -15,6 +15,7 @@ function lifecycleWith(
   assignResult: unknown = true,
   checks: [boolean, boolean] = [true, true],
   lockFlags?: [boolean, boolean],
+  errorMessages: string[] = [],
 ) {
   const methods: string[] = [];
   let lockReads = 0;
@@ -30,6 +31,7 @@ function lifecycleWith(
           isTransportCheckSuccessful: checks[index],
           ...(lockFlags ? { isLockedInRequests: lockFlags[index] } : {}),
           locks: numbers.map((number) => ({ number })),
+          checkMessages: { errorMessages: errorMessages.map((message) => ({ message, severity: 0 })) },
         } as T;
       }
       if (method === 'adtLs/cts/transport/assignTransportToObject') return assignResult as T;
@@ -90,6 +92,14 @@ describe('lifecycle.assignTransport', () => {
       'Could not verify the CTS lock for ZCL_X.',
     );
     expect(methods).not.toContain('adtLs/cts/transport/assignTransportToObject');
+  });
+
+  it("names SAP's reason when the lock check fails", async () => {
+    const reason = 'Object R3TR CLAS ZCL_X locked in task DEVK900002 (DEVELOPER) not specified for this client';
+    const { lc } = lifecycleWith([[], []], true, [false, true], undefined, [reason]);
+    await expect(lc.assignTransport({ ...ref, transport: 'DEVK900001' })).rejects.toThrow(
+      `Could not verify the CTS lock for ZCL_X. ${reason}`,
+    );
   });
 
   it('does not report an assignment when the readback failed', async () => {

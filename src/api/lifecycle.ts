@@ -14,6 +14,8 @@ import { isTransientColdError, withColdRetry } from '../resilience/cold-retry.js
 import { withWriteRetry } from '../resilience/session-retry.js';
 import {
   type SearchReference,
+  type SourceVersion,
+  abapStat,
   deleteFile,
   getLsUri,
   includeAffUri,
@@ -21,6 +23,7 @@ import {
   metadataAffUri,
   quickSearch,
   readFile,
+  toggleVersion,
   writeFile,
 } from './repository.js';
 
@@ -154,13 +157,49 @@ export function createLifecycle(deps: LifecycleDeps) {
     return getLsUri(driver, d, hit.uri);
   }
 
+  // An active-version read toggles adt-ls's session-wide requested version of the object, so
+  // two of them must not interleave on one object. Keyed by the object's main AFF URI.
+  const versionReads = new Map<string, Promise<unknown>>();
+  function oneAtATime<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const run = (versionReads.get(key) ?? Promise.resolve()).then(fn, fn);
+    const tail = run.catch(() => {});
+    versionReads.set(key, tail);
+    void tail.then(() => {
+      if (versionReads.get(key) === tail) versionReads.delete(key);
+    });
+    return run;
+  }
+
+  /**
+   * Read `uri` in the object's active version. adt-ls serves the logged-on user's draft when
+   * there is one; only then is the object toggled to active, read, and toggled back. Toggling
+   * an object that already serves the active version would pin it there unnoticed (a later
+   * draft from another session would stay hidden), so that case is a plain read.
+   */
+  function readActive(mainUri: string, uri: string): Promise<string> {
+    return oneAtATime(mainUri, async () => {
+      if ((await abapStat(driver, mainUri)) === 'active') return readFile(driver, uri);
+      try {
+        await toggleVersion(driver, mainUri);
+        if ((await abapStat(driver, mainUri)) !== 'active') {
+          throw new Error(`adt-ls did not switch ${mainUri} to the active version.`);
+        }
+        return await readFile(driver, uri);
+      } finally {
+        // A write in between switches adt-ls back to the draft by itself: toggle only if it
+        // still serves the active version.
+        if ((await abapStat(driver, mainUri)) === 'active') await toggleVersion(driver, mainUri);
+      }
+    });
+  }
+
   return {
     resolveAffUri,
 
-    async readSource(args: ObjectRef & { include?: string }): Promise<string> {
-      let uri = await resolveAffUri(args);
-      if (args.include) uri = includeAffUri(uri, args.include);
-      const content = await readFile(driver, uri);
+    async readSource(args: ObjectRef & { include?: string; version?: SourceVersion }): Promise<string> {
+      const mainUri = await resolveAffUri(args);
+      const uri = args.include ? includeAffUri(mainUri, args.include) : mainUri;
+      const content = args.version === 'active' ? await readActive(mainUri, uri) : await readFile(driver, uri);
       if (isUnsupportedPlaceholder(content)) {
         throw new Error(
           `Object type ${args.objectType} is not served by adt-ls headless on this runtime/backend. Use Eclipse for this type or update SAPSE.adt-vscode.`,

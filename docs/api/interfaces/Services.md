@@ -72,7 +72,8 @@ Publish (or unpublish) a service binding — mutating.
 
 Defined in: [api/services.ts:55](https://github.com/arc-mcp/adt-ls/blob/main/src/api/services.ts#L55)
 
-List the OData services a binding exposes (type, version, definitions, publish state).
+List the OData services a binding exposes (type, version, definitions, and the publish
+state, which the backend reports for OData V4 only).
 
 #### Parameters
 
@@ -93,7 +94,7 @@ List the OData services a binding exposes (type, version, definitions, publish s
 Defined in: [api/services.ts:59](https://github.com/arc-mcp/adt-ls/blob/main/src/api/services.ts#L59)
 
 Live OData service info — the **service URL + entity sets** — for a binding's service
-(chains fetch_services → fetch_service_information). For an unpublished V4 binding this
+(chains fetch_services → fetch_service_information). For an unpublished binding this
 throws asking you to publish first. `service` picks a specific service (default: first).
 
 #### Parameters

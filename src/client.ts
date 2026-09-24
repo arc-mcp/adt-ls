@@ -500,8 +500,8 @@ export interface AdtLsClient {
     listCreatableObjects(): Promise<unknown>;
     /** Creation details (flat MCP field list) for one object type, e.g. `"CLAS/OC"`. */
     getObjectTypeDetails(objectType: string, opts?: { name?: string }): Promise<unknown>;
-    /** Full creation form contract — each field's value-help target types, name regex, label,
-     * required — parsed from the native UI model (richer than `getObjectTypeDetails`). */
+    /** Full creation form contract — each field's value-help target types, choice values, name
+     * regex, label, required — parsed from the native UI model (richer than `getObjectTypeDetails`). */
     getCreationForm(
       objectType: string,
       opts?: { name?: string },

@@ -399,8 +399,8 @@ Creation details (flat MCP field list) for one object type, e.g. `"CLAS/OC"`.
 
 > **getCreationForm**(`objectType`, `opts?`): `Promise`\<\{ `objectType`: `string`; `fields`: [`CreationField`](CreationField.md)[]; \}\>
 
-Full creation form contract — each field's value-help target types, name regex, label,
-required — parsed from the native UI model (richer than `getObjectTypeDetails`).
+Full creation form contract — each field's value-help target types, choice values, name
+regex, label, required — parsed from the native UI model (richer than `getObjectTypeDetails`).
 
 ##### Parameters
 

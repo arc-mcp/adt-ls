@@ -101,6 +101,9 @@ export interface CreationField {
   /** ADT object types this field accepts (e.g. `superclass` → `["CLAS/OC"]`,
    * `referencedObject` → `["TABL/DT","STOB"]`). */
   valueHelpTypes?: string[];
+  /** The legal values of a choice field, e.g. an SRVB's `bindingType` → `OData V4 - UI`, …, or an
+   * SRVD's `sourceType` → `S` (Definition) / `X` (Extension). Pass `value`, not `title`. */
+  values?: Array<{ value: string; title?: string }>;
 }
 
 export interface LifecycleDeps {
@@ -327,7 +330,10 @@ export function createLifecycle(deps: LifecycleDeps) {
      * `getObjectTypeDetails`: each field's value-help target object types, name regex, label,
      * and required flag, parsed from the native `objectCreation/getCreationUiModelAndContent`
      * UI model. Use it to fill type-specific fields legally (e.g. a `DDLS/DF`'s
-     * `referencedObject` must be a `TABL/DT`/`STOB`; a class `superclass` must be `CLAS/OC`).
+     * `referencedObject` must be a `TABL/DT`/`STOB`; a class `superclass` must be `CLAS/OC`),
+     * and choice fields list their legal `values` (an SRVB's `bindingType`). `required` is the
+     * form's flag: the backend can still need a field the form leaves optional (an SRVD's
+     * `sourceType`).
      */
     async getCreationForm(
       objectType: string,
@@ -358,6 +364,14 @@ export function createLifecycle(deps: LifecycleDeps) {
               ?.map((a) => a.value)
               .filter((v): v is string => Boolean(v));
             if (vh?.length) field.valueHelpTypes = vh;
+            const values = (c.values as Array<{ value?: unknown; title?: unknown }> | undefined)
+              ?.filter((v) => typeof v?.value === 'string')
+              .map((v) =>
+                typeof v.title === 'string'
+                  ? { value: v.value as string, title: v.title }
+                  : { value: v.value as string },
+              );
+            if (values?.length) field.values = values;
             fields.push(field);
           }
         }

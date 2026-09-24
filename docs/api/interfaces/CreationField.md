@@ -60,3 +60,22 @@ Defined in: [api/lifecycle.ts:102](https://github.com/arc-mcp/adt-ls/blob/main/s
 
 ADT object types this field accepts (e.g. `superclass` → `["CLAS/OC"]`,
 `referencedObject` → `["TABL/DT","STOB"]`).
+
+***
+
+### values?
+
+> `optional` **values?**: `object`[]
+
+Defined in: [api/lifecycle.ts:106](https://github.com/arc-mcp/adt-ls/blob/main/src/api/lifecycle.ts#L106)
+
+The legal values of a choice field, e.g. an SRVB's `bindingType` → `OData V4 - UI`, …, or an
+SRVD's `sourceType` → `S` (Definition) / `X` (Extension). Pass `value`, not `title`.
+
+#### value
+
+> **value**: `string`
+
+#### title?
+
+> `optional` **title?**: `string`

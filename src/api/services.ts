@@ -31,6 +31,8 @@ export interface ServiceBindingServices {
   bindingType?: string;
   odataVersion?: string;
   odataInfoUri?: Array<{ href: string }>;
+  /** The binding's publish state. Sent for OData V4 only (verified live on adt-ls 1.1.2). */
+  isPublished?: boolean;
   services: Array<{
     name: string;
     content: Array<{ serviceDefinition: string; serviceVersion: string }>;
@@ -52,10 +54,11 @@ export interface Services {
   /** Publish (or unpublish) a service binding — mutating. `service` picks the service
    * definition an OData V2 binding toggles (default: its first). */
   publishServiceBinding(ref: ObjectRef, opts?: { service?: string }): Promise<unknown>;
-  /** List the OData services a binding exposes (type, version, definitions, publish state). */
+  /** List the OData services a binding exposes (type, version, definitions, and the publish
+   * state, which the backend reports for OData V4 only). */
   listServices(ref: ObjectRef): Promise<ServiceBindingServices>;
   /** Live OData service info — the **service URL + entity sets** — for a binding's service
-   * (chains fetch_services → fetch_service_information). For an unpublished V4 binding this
+   * (chains fetch_services → fetch_service_information). For an unpublished binding this
    * throws asking you to publish first. `service` picks a specific service (default: first). */
   getServiceInfo(ref: ObjectRef, opts?: { service?: string }): Promise<ServiceInfo>;
 }
@@ -75,6 +78,17 @@ export function createServices(deps: ServicesDeps): Services {
     const lsUri = await lifecycle.resolveAffUri(ref);
     await readFile(lsp, lsUri).catch(() => {}); // best-effort SFS warm-up
     return lsUri;
+  }
+
+  // fetch_services sends no `isPublished` for an OData V2 binding (verified live on adt-ls
+  // 1.1.2); the binding details' `objectData.published` carries it for every OData version.
+  async function publishedFromDetails(ref: ObjectRef): Promise<boolean | undefined> {
+    const lsUri = await resolveAndLoad(ref);
+    const details = await lsp.sendRequest<{
+      objectData?: { published?: boolean };
+      srvbObjectData?: { published?: boolean };
+    } | null>('adtLs/businessservice/srvb/getServiceBindingDetails', { lsUri });
+    return (details?.objectData ?? details?.srvbObjectData)?.published;
   }
 
   async function fetchServices(ref: ObjectRef): Promise<ServiceBindingServices> {
@@ -148,8 +162,8 @@ export function createServices(deps: ServicesDeps): Services {
     },
 
     /** List the OData services a binding exposes (`abap_business_services-fetch_services`):
-     * `{bindingType, odataVersion, odataInfoUri, services:[{name, content:[{serviceDefinition,
-     * serviceVersion}], isPublished?}]}`. */
+     * `{bindingType, odataVersion, odataInfoUri, isPublished? (V4 only), services:[{name,
+     * content:[{serviceDefinition, serviceVersion}]}]}`. */
     listServices(ref: ObjectRef): Promise<ServiceBindingServices> {
       return fetchServices(ref);
     },
@@ -164,10 +178,13 @@ export function createServices(deps: ServicesDeps): Services {
       if (!svc) throw new Error(`No OData service found in binding ${ref.name}.`);
       const content = svc.content?.[0];
       if (!content) throw new Error(`Service ${svc.name} in ${ref.name} has no version content.`);
-      // V4 must be published before its service info is reachable (per the tool contract).
-      if (bindingData.odataVersion === 'V4' && svc.isPublished === false) {
+      // An unpublished binding has no service URL: V4 fails in the tool, V2 answers without one.
+      // fetch_services puts `isPublished` at its top level (V4), not on the service.
+      const isPublished = bindingData.isPublished ?? svc.isPublished ?? (await publishedFromDetails(ref));
+      if (isPublished === false) {
+        const version = bindingData.odataVersion ? ` (OData ${bindingData.odataVersion})` : '';
         throw new Error(
-          `Service binding ${ref.name} (OData V4) is not published — call publishServiceBinding first, then retry getServiceInfo.`,
+          `Service binding ${ref.name}${version} is not published — call publishServiceBinding first, then retry getServiceInfo.`,
         );
       }
       const res = parseFederated(
@@ -179,11 +196,17 @@ export function createServices(deps: ServicesDeps): Services {
           serviceVersion: content.serviceVersion,
           odataInfoUri: bindingData.odataInfoUri?.[0]?.href ?? '',
           odataVersion: bindingData.odataVersion ?? '',
-          isPublished: svc.isPublished ?? true,
+          isPublished: isPublished ?? true,
         }),
       );
       if (!res.ok) throw new Error(`fetch_service_information failed for ${svc.name}: ${res.text}`);
-      return res.data as ServiceInfo;
+      // A refusal ("Please publish the service binding …") comes back as a successful `{error}`.
+      const data = res.data as Partial<ServiceInfo> & { error?: unknown };
+      if (typeof data?.error === 'string' || typeof data?.serviceUrl !== 'string') {
+        const reason = typeof data?.error === 'string' ? data.error.trim() : 'no service URL in the answer';
+        throw new Error(`fetch_service_information failed for ${svc.name}: ${reason}`);
+      }
+      return data as ServiceInfo;
     },
   };
 }

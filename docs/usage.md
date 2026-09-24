@@ -187,9 +187,9 @@ await adt.quality.runUnitTestsWithCoverage(ref);     // { status, result, covera
 const { output } = await adt.services.runApplication({ name: 'ZCL_RUN', objectType: 'CLAS/OC' });
 await adt.services.serviceBindingDetails({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' });
 await adt.services.publishServiceBinding({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' }); // mutating
-await adt.services.listServices({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' }); // OData version + service defs + publish state
+await adt.services.listServices({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' }); // OData version + service defs (+ publish state on V4)
 const { serviceUrl, entitySets } = await adt.services.getServiceInfo({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' });
-// → live OData URL + entity sets (publish a V4 binding first). Uses the abap_business_services MCP tools.
+// → live OData URL + entity sets (publish the binding first). Uses the abap_business_services MCP tools.
 ```
 
 ### transport — CTS

@@ -200,7 +200,13 @@ export function createServices(deps: ServicesDeps): Services {
         }),
       );
       if (!res.ok) throw new Error(`fetch_service_information failed for ${svc.name}: ${res.text}`);
-      return res.data as ServiceInfo;
+      // A refusal ("Please publish the service binding …") comes back as a successful `{error}`.
+      const data = res.data as Partial<ServiceInfo> & { error?: unknown };
+      if (typeof data?.error === 'string' || typeof data?.serviceUrl !== 'string') {
+        const reason = typeof data?.error === 'string' ? data.error.trim() : 'no service URL in the answer';
+        throw new Error(`fetch_service_information failed for ${svc.name}: ${reason}`);
+      }
+      return data as ServiceInfo;
     },
   };
 }

@@ -173,6 +173,25 @@ describe('services.getServiceInfo', () => {
     });
   });
 
+  it("throws the tool's refusal instead of returning it as service info", async () => {
+    const svc = createServices({
+      lsp,
+      lifecycle,
+      destination: () => 'ADTLS',
+      callTool: async (name) => {
+        if (name === 'abap_business_services-fetch_services')
+          return fed({
+            ...FETCH_SERVICES_V2,
+            services: [{ name: '/X', content: [{ serviceDefinition: '/XDEF', serviceVersion: '0001' }] }],
+          });
+        return fed({ error: 'Please publish the requested service before fetching service information.' });
+      },
+    });
+    await expect(svc.getServiceInfo({ name: '/X', objectType: 'SRVB/SVB' })).rejects.toThrow(
+      'fetch_service_information failed for /X: Please publish the requested service before fetching service information.',
+    );
+  });
+
   it('picks the requested service by name', async () => {
     let infoArgs: Record<string, unknown> | undefined;
     const twoServices = {

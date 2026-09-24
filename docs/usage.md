@@ -140,6 +140,8 @@ const inactive = await adt.repository.listInactive();
 // read
 const src = await adt.source.read({ name: 'ZCL_FOO', objectType: 'CLAS/OC' });
 const tests = await adt.source.read({ name: 'ZCL_FOO', objectType: 'CLAS/OC', include: 'testclasses' });
+// your draft if you have one, else the active version; or the active version explicitly
+const active = await adt.source.read({ name: 'ZCL_FOO', objectType: 'CLAS/OC', version: 'active' });
 
 // create → edit → activate → test → delete (supported object types)
 await adt.lifecycle.create({ objectType: 'CLAS/OC', name: 'ZCL_BAR', packageName: '$TMP', description: 'demo' });

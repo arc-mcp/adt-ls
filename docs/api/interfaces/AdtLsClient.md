@@ -124,6 +124,25 @@ Delete by AFF URI (use the `.json` metadata URI for objects).
 
 `Promise`\<`unknown`\>
 
+#### abapStat()
+
+> **abapStat**(`uri`): `Promise`\<[`SourceVersion`](../type-aliases/SourceVersion.md)\>
+
+Which version adt-ls serves for the object at `uri` in this session: `'inactive'` when the
+logged-on user has a draft, else `'active'` (another user's draft is never served).
+
+##### Parameters
+
+###### uri
+
+`string`
+
+##### Returns
+
+`Promise`\<[`SourceVersion`](../type-aliases/SourceVersion.md)\>
+
+***
+
 #### listInactive()
 
 > **listInactive**(): `Promise`\<`unknown`[]\>
@@ -149,6 +168,10 @@ Read object source by name.
 > **read**(`args`): `Promise`\<`string`\>
 
 Read an object's source (per include for classes, e.g. `include: 'testclasses'`).
+`version: 'inactive'` (the default) reads the logged-on user's draft if there is one, else
+the active version; another user's draft is never served. `version: 'active'` reads the
+active version: adt-ls is switched for this session and switched back afterwards, so other
+calls on the same object meanwhile also see the active version.
 
 ##### Parameters
 

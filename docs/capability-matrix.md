@@ -17,7 +17,8 @@ one serves a call. Raw access: `adt.raw.tool(name,args)` (MCP) and
 | `repository.getLsUri(adtUri)` | LSP | `adtLs/repository/getLsUri` |
 | `repository.readFile / writeFile / delete` | LSP | `adtLs/fileSystem/{readFile,writeFile,delete}` |
 | `repository.listInactive()` | LSP | `adtLs/activation/getInactiveObjects` |
-| `source.read(ref)` | LSP | resolve → `fileSystem/readFile` |
+| `source.read(ref)` | LSP | resolve → `fileSystem/readFile`; `version: 'active'` adds `fileSystem/abapStat` + `toggleVersion` around it |
+| `repository.abapStat(uri)` | LSP | `adtLs/fileSystem/abapStat` |
 | `lifecycle.create(ref)` | MCP | `abap_creation-create_object` |
 | `lifecycle.update(ref)` | LSP | `fileSystem/writeFile` |
 | `lifecycle.activate(ref, {forceActivation})` | LSP | `adtLs/activation/activate` (native — per-phase flags + diagnostics; **0.4.0**) |

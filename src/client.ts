@@ -25,6 +25,7 @@ import type { Navigation } from './api/navigation.js';
 import { createQuality } from './api/quality.js';
 import type { Quality } from './api/quality.js';
 import {
+  abapStat,
   deleteFile,
   getInactiveObjects,
   getLsUri,
@@ -34,7 +35,7 @@ import {
   searchWithRevive,
   writeFile,
 } from './api/repository.js';
-import type { QuickSearchResult, UserRef } from './api/repository.js';
+import type { QuickSearchResult, SourceVersion, UserRef } from './api/repository.js';
 import { createServices } from './api/services.js';
 import type { Services } from './api/services.js';
 import { createDestination, ensureLoggedOn, getLogonInfo, initializeDestinationsService } from './auth/reentrance.js';
@@ -361,6 +362,7 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
         getUsers: () => getUsers(active, requireDest()),
         getLsUri: (adtUri: string) => getLsUri(active, requireDest(), adtUri),
         readFile: (uri: string) => readFile(active, uri),
+        abapStat: (uri: string) => abapStat(active, uri),
         writeFile: (uri: string, content: string) => writeFile(active, uri, content),
         delete: (uri: string) => deleteFile(active, uri),
         listInactive: () => getInactiveObjects(active, requireDest()),
@@ -444,6 +446,9 @@ export interface AdtLsClient {
     getLsUri(adtUri: string): Promise<string>;
     /** Read an AFF file's content by repotree URI. */
     readFile(uri: string): Promise<string>;
+    /** Which version adt-ls serves for the object at `uri` in this session: `'inactive'` when the
+     * logged-on user has a draft, else `'active'` (another user's draft is never served). */
+    abapStat(uri: string): Promise<SourceVersion>;
     /** Write an AFF file (plain multi-line source) by repotree URI. */
     writeFile(uri: string, content: string): Promise<unknown>;
     /** Delete by AFF URI (use the `.json` metadata URI for objects). */
@@ -453,8 +458,14 @@ export interface AdtLsClient {
   };
   /** Read object source by name. */
   source: {
-    /** Read an object's source (per include for classes, e.g. `include: 'testclasses'`). */
-    read(args: ObjectRef & { include?: string }): Promise<string>;
+    /**
+     * Read an object's source (per include for classes, e.g. `include: 'testclasses'`).
+     * `version: 'inactive'` (the default) reads the logged-on user's draft if there is one, else
+     * the active version; another user's draft is never served. `version: 'active'` reads the
+     * active version: adt-ls is switched for this session and switched back afterwards, so other
+     * calls on the same object meanwhile also see the active version.
+     */
+    read(args: ObjectRef & { include?: string; version?: SourceVersion }): Promise<string>;
   };
   /** The authoring lifecycle for object types served by the installed runtime/backend. */
   lifecycle: {

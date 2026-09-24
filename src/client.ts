@@ -31,6 +31,7 @@ import {
   getUsers,
   quickSearch,
   readFile,
+  searchTypes,
   searchWithRevive,
   writeFile,
 } from './api/repository.js';
@@ -351,7 +352,7 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
           const run = () =>
             quickSearch(
               active,
-              { destination: requireDest(), pattern, maxResults: o.maxResults, types: o.types },
+              { destination: requireDest(), pattern, maxResults: o.maxResults, types: searchTypes(o.types) },
               { cold: o.cold },
             );
           const r = await searchWithRevive(run, reviveIfDead);
@@ -433,7 +434,8 @@ export interface AdtLsClient {
   capabilities(): Promise<AdtLsCapabilities>;
   /** Repository queries + file operations + the name→URI resolver. */
   repository: {
-    /** Search ABAP repository objects by name pattern (e.g. `"CL_ABAP*"`), optionally filtered by ADT type. `cold` retries the cold-index window. */
+    /** Search ABAP repository objects by name pattern (e.g. `"CL_ABAP*"`), optionally filtered by ADT type. `cold` retries the cold-index window.
+     * adt-ls finds nothing for `SRVD/SRV`, `BDEF/BDO`, `DDLX/EX` and `NROB/NRO`, so these are searched by their main type (the only subtype of it). */
     search(
       pattern: string,
       opts?: { maxResults?: number; types?: string[]; cold?: boolean },

@@ -21,6 +21,7 @@ import {
   metadataAffUri,
   quickSearch,
   readFile,
+  searchTypes,
   writeFile,
 } from './repository.js';
 
@@ -131,21 +132,22 @@ export function createLifecycle(deps: LifecycleDeps) {
       quickSearch(driver, { destination: d, pattern: ref.name, maxResults: 20, types: [type] }, { cold: true });
     const findHit = (references: SearchReference[]) =>
       references.find((r) => r.name?.toUpperCase() === ref.name.toUpperCase() && r.uri);
-    let { references } = await doSearch(ref.objectType);
+    // Subtypes adt-ls can't filter are searched by their main type right away (searchTypes).
+    const searchType = searchTypes([ref.objectType])[0];
+    let { references } = await doSearch(searchType);
     // Empty after cold-retry can also mean the SAP session DIED (idle-expired) — adt-ls
     // returns [] rather than "logged off". Probe + re-logon, then search once more before
     // declaring "not found". A genuinely-absent object: the probe finds the session alive
     // → no re-logon → we fall through to the not-found error below.
     if (references.length === 0 && deps.reviveIfDead && (await deps.reviveIfDead())) {
-      ({ references } = await doSearch(ref.objectType));
+      ({ references } = await doSearch(searchType));
     }
     let hit = findHit(references);
-    // The search's type filter misses some subtyped refs (verified live on 1.1.2: `SRVD/SRV`
-    // and `BDEF/BDO` find nothing, while the bare `SRVD` / `BDEF` finds the same object).
-    // Retry once with the main type, only when the typed search found nothing at all; the
-    // exact-name match still applies.
+    // The search's type filter may miss other subtyped refs too (as it does for the ones
+    // searchTypes lists). Retry once with the main type, only when the typed search found
+    // nothing at all; the exact-name match still applies.
     const mainType = ref.objectType.split('/')[0];
-    if (references.length === 0 && mainType && mainType !== ref.objectType) {
+    if (references.length === 0 && mainType && mainType !== searchType) {
       hit = findHit((await doSearch(mainType)).references);
     }
     if (!hit?.uri) {

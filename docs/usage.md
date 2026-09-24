@@ -130,6 +130,7 @@ MCP tool schemas. Object support depends on the installed runtime and backend; s
 
 ```ts
 const { references } = await adt.repository.search('ZCL_*', { types: ['CLAS/OC'], maxResults: 50 });
+// SRVD/SRV, BDEF/BDO, DDLX/EX, NROB/NRO are searched by their main type (adt-ls can't filter them)
 const users = await adt.repository.getUsers();
 const inactive = await adt.repository.listInactive();
 ```

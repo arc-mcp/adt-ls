@@ -12,6 +12,7 @@ import { parseFederated } from '../channels/federated.js';
 import type { LspRequester } from '../driver.js';
 import { isTransientColdError, withColdRetry } from '../resilience/cold-retry.js';
 import { withWriteRetry } from '../resilience/session-retry.js';
+import { type ObjectAccess, createObjectAccess } from './object-access.js';
 import {
   type SearchReference,
   type SourceVersion,
@@ -123,6 +124,8 @@ export interface LifecycleDeps {
   callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
   /** The connected destination id, or undefined. */
   destination: () => string | undefined;
+  /** Shared with repository file operations and navigation in the unified client. */
+  objectAccess?: ObjectAccess;
   /**
    * Heal a dead SAP session: probe liveness, re-logon if dead, resolve `true` iff it
    * re-logged on (so the caller retries). Optional — when omitted, the empty/error
@@ -133,6 +136,7 @@ export interface LifecycleDeps {
 
 export function createLifecycle(deps: LifecycleDeps) {
   const { driver, callTool } = deps;
+  const withObjectAccess = deps.objectAccess ?? createObjectAccess();
   const dest = (): string => {
     const d = deps.destination();
     if (!d) throw new Error('No ABAP destination is connected.');
@@ -179,40 +183,35 @@ export function createLifecycle(deps: LifecycleDeps) {
     return getLsUri(driver, d, hit.uri);
   }
 
-  // An active-version read toggles adt-ls's session-wide requested version of the object, so
-  // two of them must not interleave on one object. Keyed by the object's main AFF URI.
-  const versionReads = new Map<string, Promise<unknown>>();
-  function oneAtATime<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const run = (versionReads.get(key) ?? Promise.resolve()).then(fn, fn);
-    const tail = run.catch(() => {});
-    versionReads.set(key, tail);
-    void tail.then(() => {
-      if (versionReads.get(key) === tail) versionReads.delete(key);
-    });
-    return run;
-  }
-
   /**
    * Read `uri` in the object's active version. adt-ls serves the logged-on user's draft when
    * there is one; only then is the object toggled to active, read, and toggled back. Toggling
    * an object that already serves the active version would pin it there unnoticed (a later
    * draft from another session would stay hidden), so that case is a plain read.
    */
-  function readActive(mainUri: string, uri: string): Promise<string> {
-    return oneAtATime(mainUri, async () => {
-      if ((await abapStat(driver, mainUri)) === 'active') return readFile(driver, uri);
-      try {
-        await toggleVersion(driver, mainUri);
-        if ((await abapStat(driver, mainUri)) !== 'active') {
-          throw new Error(`adt-ls did not switch ${mainUri} to the active version.`);
+  async function readActive(uri: string): Promise<string> {
+    // Versions are per file: a class's main source can be active while an include has a draft.
+    const hadDraft = (await abapStat(driver, uri)) === 'inactive';
+    try {
+      if (hadDraft) {
+        await toggleVersion(driver, uri);
+        if ((await abapStat(driver, uri)) !== 'active') {
+          throw new Error(`adt-ls did not switch ${uri} to the active version.`);
         }
-        return await readFile(driver, uri);
-      } finally {
-        // A write in between switches adt-ls back to the draft by itself: toggle only if it
-        // still serves the active version.
-        if ((await abapStat(driver, mainUri)) === 'active') await toggleVersion(driver, mainUri);
       }
-    });
+      const content = await readFile(driver, uri);
+      // Raw calls bypass the object queue. Detect a write that reset the served version
+      // during the read rather than returning draft source as an active version.
+      if ((await abapStat(driver, uri)) !== 'active') {
+        throw new Error(
+          `The served version of ${uri} changed during the active read; retry without concurrent raw calls.`,
+        );
+      }
+      return content;
+    } finally {
+      // A raw write can already have restored the draft. Never blindly toggle it back to active.
+      if (hadDraft && (await abapStat(driver, uri)) === 'active') await toggleVersion(driver, uri);
+    }
   }
 
   return {
@@ -221,7 +220,9 @@ export function createLifecycle(deps: LifecycleDeps) {
     async readSource(args: ObjectRef & { include?: string; version?: SourceVersion }): Promise<string> {
       const mainUri = await resolveAffUri(args);
       const uri = args.include ? includeAffUri(mainUri, args.include) : mainUri;
-      const content = args.version === 'active' ? await readActive(mainUri, uri) : await readFile(driver, uri);
+      const content = await withObjectAccess(mainUri, () =>
+        args.version === 'active' ? readActive(uri) : readFile(driver, uri),
+      );
       if (isUnsupportedPlaceholder(content)) {
         throw new Error(
           `Object type ${args.objectType} is not served by adt-ls headless on this runtime/backend. Use Eclipse for this type or update SAPSE.adt-vscode.`,
@@ -259,10 +260,12 @@ export function createLifecycle(deps: LifecycleDeps) {
     },
 
     async updateSource(args: ObjectRef & { source: string; include?: string }): Promise<void> {
-      let uri = await resolveAffUri(args);
-      if (args.include) uri = includeAffUri(uri, args.include);
+      const mainUri = await resolveAffUri(args);
+      const uri = args.include ? includeAffUri(mainUri, args.include) : mainUri;
       // A write can race a session death (lock ok, PUT 500/423) — revive + retry once.
-      await withWriteRetry(() => writeFile(driver, uri, args.source), deps.reviveIfDead);
+      await withObjectAccess(mainUri, () =>
+        withWriteRetry(() => writeFile(driver, uri, args.source), deps.reviveIfDead),
+      );
     },
 
     /**
@@ -272,22 +275,24 @@ export function createLifecycle(deps: LifecycleDeps) {
      */
     async activate(args: ObjectRef & { forceActivation?: boolean }): Promise<ActivateResult> {
       const uri = await resolveAffUri(args);
-      const res = await withWriteRetry(
-        () =>
-          driver.sendRequest<{
-            isCheckExecuted?: boolean;
-            isActivationExecuted?: boolean;
-            isGenerationExecuted?: boolean;
-            isForceSupported?: boolean;
-            refreshFileUris?: string[];
-            objectDiagnostics?: unknown[];
-          }>('adtLs/activation/activate', {
-            destination: dest(),
-            fileUris: [uri],
-            references: [],
-            forceActivation: args.forceActivation ?? false,
-          }),
-        deps.reviveIfDead,
+      const res = await withObjectAccess(uri, () =>
+        withWriteRetry(
+          () =>
+            driver.sendRequest<{
+              isCheckExecuted?: boolean;
+              isActivationExecuted?: boolean;
+              isGenerationExecuted?: boolean;
+              isForceSupported?: boolean;
+              refreshFileUris?: string[];
+              objectDiagnostics?: unknown[];
+            }>('adtLs/activation/activate', {
+              destination: dest(),
+              fileUris: [uri],
+              references: [],
+              forceActivation: args.forceActivation ?? false,
+            }),
+          deps.reviveIfDead,
+        ),
       );
       const diagnostics = res?.objectDiagnostics ?? [];
       return {
@@ -313,7 +318,9 @@ export function createLifecycle(deps: LifecycleDeps) {
 
     async deleteObject(args: ObjectRef): Promise<void> {
       const uri = await resolveAffUri(args);
-      await withWriteRetry(() => deleteFile(driver, metadataAffUri(uri)), deps.reviveIfDead);
+      await withObjectAccess(uri, () =>
+        withWriteRetry(() => deleteFile(driver, metadataAffUri(uri)), deps.reviveIfDead),
+      );
     },
 
     /**

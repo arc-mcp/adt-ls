@@ -8,6 +8,7 @@
  */
 import type { LspClient } from '../driver.js';
 import type { Lifecycle, ObjectRef } from './lifecycle.js';
+import { type ObjectAccess, createObjectAccess } from './object-access.js';
 import { readFile } from './repository.js';
 
 /** Where to point a position-based query: a declared symbol name, OR an explicit 1-based
@@ -112,6 +113,8 @@ export interface NavigationDeps {
   lifecycle: Pick<Lifecycle, 'resolveAffUri'>;
   /** Server semantic-tokens legend (from initialize) — enables `semanticTokens` decoding. */
   semanticTokensLegend?: SemanticTokensLegend;
+  /** Shared with version-aware reads and writes in the unified client. */
+  objectAccess?: ObjectAccess;
 }
 
 /** LSP code-intelligence surface (the `navigation` namespace). Positions are a declared
@@ -163,24 +166,11 @@ export interface Navigation {
 export function createNavigation(deps: NavigationDeps): Navigation {
   const { lsp, lifecycle } = deps;
 
-  // Per-URI serialization: didOpen/didClose share ONE LSP connection, so two concurrent
+  // Per-object serialization: didOpen/didClose share ONE LSP connection, so two concurrent
   // ops on the SAME object would duplicate-open and let the first's didClose pull the
   // document out from under the second's in-flight query. Different objects still run in
   // parallel.
-  const tails = new Map<string, Promise<void>>();
-  function runExclusive<T>(uri: string, op: () => Promise<T>): Promise<T> {
-    const prev = tails.get(uri) ?? Promise.resolve();
-    const run = prev.then(op, op);
-    const tail = run.then(
-      () => {},
-      () => {},
-    );
-    tails.set(uri, tail);
-    tail.then(() => {
-      if (tails.get(uri) === tail) tails.delete(uri);
-    });
-    return run;
-  }
+  const runExclusive = deps.objectAccess ?? createObjectAccess();
 
   /** Open the object's document, run fn (with its source), always didClose. */
   async function withOpenDocument<T>(ref: ObjectRef, fn: (uri: string, content: string) => Promise<T>): Promise<T> {

@@ -129,7 +129,7 @@ Delete by AFF URI (use the `.json` metadata URI for objects).
 
 > **abapStat**(`uri`): `Promise`\<[`SourceVersion`](../type-aliases/SourceVersion.md)\>
 
-Which version adt-ls serves for the object at `uri` in this session: `'inactive'` when the
+Which version adt-ls serves for the file at `uri` in this session: `'inactive'` when the
 logged-on user has a draft, else `'active'` (another user's draft is never served).
 
 ##### Parameters
@@ -188,8 +188,10 @@ Read object source by name.
 Read an object's source (per include for classes, e.g. `include: 'testclasses'`).
 `version: 'inactive'` (the default) reads the logged-on user's draft if there is one, else
 the active version; another user's draft is never served. `version: 'active'` reads the
-active version: adt-ls is switched for this session and switched back afterwards, so other
-calls on the same object meanwhile also see the active version.
+active version of the requested file, then restores the draft. Source reads/updates,
+activation/deletion, repository file operations and navigation serialize per object,
+including class includes. Coordinate other calls (especially `raw`) separately: the
+temporary version switch affects the whole object in this adt-ls session.
 
 ##### Parameters
 

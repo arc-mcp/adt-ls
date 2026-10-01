@@ -22,6 +22,7 @@ import { createLifecycle } from './api/lifecycle.js';
 import type { ActivateResult, CreateResult, CreationField, ObjectRef, TransportDiffPage } from './api/lifecycle.js';
 import { createNavigation } from './api/navigation.js';
 import type { Navigation } from './api/navigation.js';
+import { createObjectAccess } from './api/object-access.js';
 import { createQuality } from './api/quality.js';
 import type { Quality } from './api/quality.js';
 import {
@@ -296,11 +297,13 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
     };
 
     // 7. Assemble the API over the activity-tracking channels.
+    const objectAccess = createObjectAccess();
     const lifecycle = createLifecycle({
       driver: active,
       callTool: activeCallTool,
       destination: () => destId,
       reviveIfDead,
+      objectAccess,
     });
     const semanticTokensLegend = (
       activeDriver.initializeResult?.capabilities?.semanticTokensProvider as
@@ -309,7 +312,7 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
     )?.legend;
     if (!semanticTokensLegend)
       logger.warn('adt-ls advertised no semanticTokens legend — navigation.semanticTokens will not resolve type names');
-    const navigation = createNavigation({ lsp: active, lifecycle, semanticTokensLegend });
+    const navigation = createNavigation({ lsp: active, lifecycle, semanticTokensLegend, objectAccess });
     const quality = createQuality({ lsp: active, lifecycle });
     const services = createServices({ lsp: active, lifecycle, callTool: activeCallTool, destination: () => destId });
 
@@ -363,11 +366,11 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
         },
         getUsers: () => getUsers(active, requireDest()),
         getLsUri: (adtUri: string) => getLsUri(active, requireDest(), adtUri),
-        readFile: (uri: string) => readFile(active, uri),
-        abapStat: (uri: string) => abapStat(active, uri),
+        readFile: (uri: string) => objectAccess(uri, () => readFile(active, uri)),
+        abapStat: (uri: string) => objectAccess(uri, () => abapStat(active, uri)),
         readDirectory: (uri: string) => readDirectory(active, uri),
-        writeFile: (uri: string, content: string) => writeFile(active, uri, content),
-        delete: (uri: string) => deleteFile(active, uri),
+        writeFile: (uri: string, content: string) => objectAccess(uri, () => writeFile(active, uri, content)),
+        delete: (uri: string) => objectAccess(uri, () => deleteFile(active, uri)),
         listInactive: () => getInactiveObjects(active, requireDest()),
       },
       source: { read: lifecycle.readSource },
@@ -450,7 +453,7 @@ export interface AdtLsClient {
     getLsUri(adtUri: string): Promise<string>;
     /** Read an AFF file's content by repotree URI. */
     readFile(uri: string): Promise<string>;
-    /** Which version adt-ls serves for the object at `uri` in this session: `'inactive'` when the
+    /** Which version adt-ls serves for the file at `uri` in this session: `'inactive'` when the
      * logged-on user has a draft, else `'active'` (another user's draft is never served). */
     abapStat(uri: string): Promise<SourceVersion>;
     /** List a repotree directory's children. Pass a directory URI: a file URI answers `[]`
@@ -469,8 +472,10 @@ export interface AdtLsClient {
      * Read an object's source (per include for classes, e.g. `include: 'testclasses'`).
      * `version: 'inactive'` (the default) reads the logged-on user's draft if there is one, else
      * the active version; another user's draft is never served. `version: 'active'` reads the
-     * active version: adt-ls is switched for this session and switched back afterwards, so other
-     * calls on the same object meanwhile also see the active version.
+     * active version of the requested file, then restores the draft. Source reads/updates,
+     * activation/deletion, repository file operations and navigation serialize per object,
+     * including class includes. Coordinate other calls (especially `raw`) separately: the
+     * temporary version switch affects the whole object in this adt-ls session.
      */
     read(args: ObjectRef & { include?: string; version?: SourceVersion }): Promise<string>;
   };

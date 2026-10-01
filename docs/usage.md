@@ -149,6 +149,7 @@ const src = await adt.source.read({ name: 'ZCL_FOO', objectType: 'CLAS/OC' });
 const tests = await adt.source.read({ name: 'ZCL_FOO', objectType: 'CLAS/OC', include: 'testclasses' });
 // your draft if you have one, else the active version; or the active version explicitly
 const active = await adt.source.read({ name: 'ZCL_FOO', objectType: 'CLAS/OC', version: 'active' });
+const activeTests = await adt.source.read({ name: 'ZCL_FOO', objectType: 'CLAS/OC', include: 'testclasses', version: 'active' });
 
 // create → edit → activate → test → delete (supported object types)
 await adt.lifecycle.create({ objectType: 'CLAS/OC', name: 'ZCL_BAR', packageName: '$TMP', description: 'demo' });
@@ -171,6 +172,12 @@ await adt.lifecycle.generate({ generatorId: 'x-ui-service', content: jsonSchemaI
 ```
 
 For a transportable package, pass `transportRequestNumber` to `create` and use `adt.transport.*`.
+
+Active reads check the requested file's version: a class include can have an inactive draft
+even when its main source is active. The temporary switch is restored before another source
+read/update, activation/deletion, repository file operation, or navigation call on that object
+runs. Different objects can still run concurrently. Coordinate other calls, especially `raw`
+LSP/MCP calls, separately because the switch affects the object throughout this adt-ls session.
 
 ### navigation — LSP code intelligence
 

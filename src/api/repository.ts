@@ -113,13 +113,14 @@ export function writeFile(driver: LspRequester, uri: string, content: string): P
   return driver.sendRequest('adtLs/fileSystem/writeFile', { uri, content });
 }
 
-/** An object version: the active one, or the logged-on user's inactive draft. */
+/** A source file's version: the active one, or the logged-on user's inactive draft. */
 export type SourceVersion = 'active' | 'inactive';
 
 /**
- * Which version adt-ls serves for the object at `uri` in this session (`fileSystem/abapStat`):
+ * Which version adt-ls serves for the file at `uri` in this session (`fileSystem/abapStat`):
  * `inactive` when the logged-on user has a draft of it, else `active`. Another user's draft is
- * never served. `toggleVersion` changes it for this session only.
+ * never served. Class includes can differ from the main file. `toggleVersion` changes it
+ * for this session only.
  */
 export async function abapStat(driver: LspRequester, uri: string): Promise<SourceVersion> {
   const r = await driver.sendRequest<{ version?: number }>('adtLs/fileSystem/abapStat', { uri });

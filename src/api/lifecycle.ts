@@ -23,6 +23,7 @@ import {
   metadataAffUri,
   quickSearch,
   readFile,
+  searchTypes,
   toggleVersion,
   writeFile,
 } from './repository.js';
@@ -31,6 +32,14 @@ export interface ObjectRef {
   name: string;
   /** ADT type code, e.g. "CLAS/OC", "INTF/OI", "DDLS/DF". */
   objectType: string;
+  /**
+   * The object's repotree AFF URI (its main file), e.g. `filePath` from `lifecycle.create` or a
+   * previous `resolveAffUri`. When set, calls use it instead of searching by name, which saves
+   * the search round trips and doesn't depend on the search index. It must belong to the
+   * connected destination. `name` and `objectType` are still required: service-binding calls
+   * look the binding up by name, and results and errors name the object.
+   */
+  uri?: string;
 }
 export interface ActivateResult {
   success: boolean;
@@ -104,6 +113,9 @@ export interface CreationField {
   /** ADT object types this field accepts (e.g. `superclass` → `["CLAS/OC"]`,
    * `referencedObject` → `["TABL/DT","STOB"]`). */
   valueHelpTypes?: string[];
+  /** The legal values of a choice field, e.g. an SRVB's `bindingType` → `OData V4 - UI`, …, or an
+   * SRVD's `sourceType` → `S` (Definition) / `X` (Extension). Pass `value`, not `title`. */
+  values?: Array<{ value: string; title?: string }>;
 }
 
 export interface LifecycleDeps {
@@ -127,28 +139,38 @@ export function createLifecycle(deps: LifecycleDeps) {
     return d;
   };
 
-  /** Resolve {name, objectType} → repotree AFF URI (search → getLsUri). */
+  /** Resolve {name, objectType} → repotree AFF URI (search → getLsUri), or take `ref.uri`. */
   async function resolveAffUri(ref: ObjectRef): Promise<string> {
     const d = dest();
+    if (ref.uri) {
+      // abap:/repotree-v1/<destination>/… — a URI of another destination (e.g. taken from
+      // another client) names a destination this session doesn't serve.
+      const segment = /^abap:\/repotree-v1\/([^/]+)\//.exec(ref.uri)?.[1];
+      if (segment !== encodeURIComponent(d)) {
+        throw new Error(`uri of ${ref.name} is not a repotree URI of destination ${d}: ${ref.uri}`);
+      }
+      return ref.uri;
+    }
     const doSearch = (type: string) =>
       quickSearch(driver, { destination: d, pattern: ref.name, maxResults: 20, types: [type] }, { cold: true });
     const findHit = (references: SearchReference[]) =>
       references.find((r) => r.name?.toUpperCase() === ref.name.toUpperCase() && r.uri);
-    let { references } = await doSearch(ref.objectType);
+    // Subtypes adt-ls can't filter are searched by their main type right away (searchTypes).
+    const searchType = searchTypes([ref.objectType])[0];
+    let { references } = await doSearch(searchType);
     // Empty after cold-retry can also mean the SAP session DIED (idle-expired) — adt-ls
     // returns [] rather than "logged off". Probe + re-logon, then search once more before
     // declaring "not found". A genuinely-absent object: the probe finds the session alive
     // → no re-logon → we fall through to the not-found error below.
     if (references.length === 0 && deps.reviveIfDead && (await deps.reviveIfDead())) {
-      ({ references } = await doSearch(ref.objectType));
+      ({ references } = await doSearch(searchType));
     }
     let hit = findHit(references);
-    // The search's type filter misses some subtyped refs (verified live on 1.1.2: `SRVD/SRV`
-    // and `BDEF/BDO` find nothing, while the bare `SRVD` / `BDEF` finds the same object).
-    // Retry once with the main type, only when the typed search found nothing at all; the
-    // exact-name match still applies.
+    // The search's type filter may miss other subtyped refs too (as it does for the ones
+    // searchTypes lists). Retry once with the main type, only when the typed search found
+    // nothing at all; the exact-name match still applies.
     const mainType = ref.objectType.split('/')[0];
-    if (references.length === 0 && mainType && mainType !== ref.objectType) {
+    if (references.length === 0 && mainType && mainType !== searchType) {
       hit = findHit((await doSearch(mainType)).references);
     }
     if (!hit?.uri) {
@@ -366,7 +388,10 @@ export function createLifecycle(deps: LifecycleDeps) {
      * `getObjectTypeDetails`: each field's value-help target object types, name regex, label,
      * and required flag, parsed from the native `objectCreation/getCreationUiModelAndContent`
      * UI model. Use it to fill type-specific fields legally (e.g. a `DDLS/DF`'s
-     * `referencedObject` must be a `TABL/DT`/`STOB`; a class `superclass` must be `CLAS/OC`).
+     * `referencedObject` must be a `TABL/DT`/`STOB`; a class `superclass` must be `CLAS/OC`),
+     * and choice fields list their legal `values` (an SRVB's `bindingType`). `required` is the
+     * form's flag: the backend can still need a field the form leaves optional (an SRVD's
+     * `sourceType`).
      */
     async getCreationForm(
       objectType: string,
@@ -397,6 +422,14 @@ export function createLifecycle(deps: LifecycleDeps) {
               ?.map((a) => a.value)
               .filter((v): v is string => Boolean(v));
             if (vh?.length) field.valueHelpTypes = vh;
+            const values = (c.values as Array<{ value?: unknown; title?: unknown }> | undefined)
+              ?.filter((v) => typeof v?.value === 'string')
+              .map((v) =>
+                typeof v.title === 'string'
+                  ? { value: v.value as string, title: v.title }
+                  : { value: v.value as string },
+              );
+            if (values?.length) field.values = values;
             fields.push(field);
           }
         }
@@ -625,9 +658,13 @@ export function createLifecycle(deps: LifecycleDeps) {
           isTransportCheckSuccessful?: boolean;
           isLockedInRequests?: boolean;
           locks?: Array<{ number?: string }>;
+          checkMessages?: { errorMessages?: Array<{ message?: string }> };
         } | null;
         if (!r || r.isTransportCheckSuccessful === false || (r.isLockedInRequests && !Array.isArray(r.locks))) {
-          throw new Error(`Could not verify the CTS lock for ${args.name}.`);
+          // SAP names the reason here, e.g. a lock in a task "not specified for this client".
+          const reasons = (r?.checkMessages?.errorMessages ?? []).map((m) => m.message).filter(Boolean);
+          const detail = reasons.length > 0 ? ` ${reasons.join(' ')}` : '';
+          throw new Error(`Could not verify the CTS lock for ${args.name}.${detail}`);
         }
         const lockedIn = (r.locks ?? []).map((l) => l.number?.toUpperCase()).filter((n): n is string => Boolean(n));
         if (r.isLockedInRequests === true && lockedIn.length === 0) {

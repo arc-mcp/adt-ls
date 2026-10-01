@@ -92,6 +92,106 @@ describe('services.getServiceInfo', () => {
     await expect(svc.getServiceInfo({ name: '/X', objectType: 'SRVB/SVB' })).rejects.toThrow(/not published/i);
   });
 
+  it('reads the top-level isPublished of a V4 binding and refuses an un-published one', async () => {
+    const methods: string[] = [];
+    const recording: LspClient = {
+      sendRequest: async <T>(method: string): Promise<T> => {
+        methods.push(method);
+        return {} as T;
+      },
+      sendNotification: async () => {},
+    };
+    const svc = createServices({
+      lsp: recording,
+      lifecycle,
+      destination: () => 'ADTLS',
+      callTool: async (name) => {
+        if (name === 'abap_business_services-fetch_services')
+          return fed({
+            bindingType: 'ODATA',
+            isPublished: false,
+            odataVersion: 'V4',
+            odataInfoUri: [{ href: '/i' }],
+            services: [{ name: '/X', content: [{ serviceDefinition: '/D', serviceVersion: '0001' }] }],
+          });
+        throw new Error('fetch_service_information must NOT be called for an unpublished V4 binding');
+      },
+    });
+    await expect(svc.getServiceInfo({ name: '/X', objectType: 'SRVB/SVB' })).rejects.toThrow(
+      'Service binding /X (OData V4) is not published',
+    );
+    expect(methods).not.toContain('adtLs/businessservice/srvb/getServiceBindingDetails');
+  });
+
+  describe('when fetch_services omits isPublished (OData V2)', () => {
+    function servicesWithDetails(published: boolean) {
+      const tools: string[] = [];
+      const methods: string[] = [];
+      const detailsLsp: LspClient = {
+        sendRequest: async <T>(method: string): Promise<T> => {
+          methods.push(method);
+          if (method === 'adtLs/businessservice/srvb/getServiceBindingDetails')
+            return { odataversion: 'V2', objectData: { published } } as T;
+          return { content: '' } as T; // readFile warm-up
+        },
+        sendNotification: async () => {},
+      };
+      let infoArgs: Record<string, unknown> | undefined;
+      const svc = createServices({
+        lsp: detailsLsp,
+        lifecycle,
+        destination: () => 'ADTLS',
+        callTool: async (name, args) => {
+          tools.push(name);
+          if (name === 'abap_business_services-fetch_services')
+            return fed({
+              ...FETCH_SERVICES_V2,
+              services: [{ name: '/X', content: [{ serviceDefinition: '/XDEF', serviceVersion: '0001' }] }],
+            });
+          infoArgs = args;
+          return fed({ serviceUrl: '/sap/opu/odata/sap/X', entitySets: [] });
+        },
+      });
+      return { svc, tools, methods, infoArgs: () => infoArgs };
+    }
+
+    it('throws asking to publish when the binding details say un-published', async () => {
+      const { svc, tools, methods } = servicesWithDetails(false);
+      await expect(svc.getServiceInfo({ name: '/X', objectType: 'SRVB/SVB' })).rejects.toThrow(
+        'Service binding /X (OData V2) is not published',
+      );
+      expect(methods).toContain('adtLs/businessservice/srvb/getServiceBindingDetails');
+      expect(tools).not.toContain('abap_business_services-fetch_service_information');
+    });
+
+    it('passes the published state from the binding details on', async () => {
+      const { svc, infoArgs } = servicesWithDetails(true);
+      await expect(svc.getServiceInfo({ name: '/X', objectType: 'SRVB/SVB' })).resolves.toMatchObject({
+        serviceUrl: '/sap/opu/odata/sap/X',
+      });
+      expect(infoArgs()).toMatchObject({ odataVersion: 'V2', isPublished: true });
+    });
+  });
+
+  it("throws the tool's refusal instead of returning it as service info", async () => {
+    const svc = createServices({
+      lsp,
+      lifecycle,
+      destination: () => 'ADTLS',
+      callTool: async (name) => {
+        if (name === 'abap_business_services-fetch_services')
+          return fed({
+            ...FETCH_SERVICES_V2,
+            services: [{ name: '/X', content: [{ serviceDefinition: '/XDEF', serviceVersion: '0001' }] }],
+          });
+        return fed({ error: 'Please publish the requested service before fetching service information.' });
+      },
+    });
+    await expect(svc.getServiceInfo({ name: '/X', objectType: 'SRVB/SVB' })).rejects.toThrow(
+      'fetch_service_information failed for /X: Please publish the requested service before fetching service information.',
+    );
+  });
+
   it('picks the requested service by name', async () => {
     let infoArgs: Record<string, unknown> | undefined;
     const twoServices = {

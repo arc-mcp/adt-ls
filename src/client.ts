@@ -31,11 +31,13 @@ import {
   getLsUri,
   getUsers,
   quickSearch,
+  readDirectory,
   readFile,
+  searchTypes,
   searchWithRevive,
   writeFile,
 } from './api/repository.js';
-import type { QuickSearchResult, SourceVersion, UserRef } from './api/repository.js';
+import type { DirectoryEntry, QuickSearchResult, SourceVersion, UserRef } from './api/repository.js';
 import { createServices } from './api/services.js';
 import type { Services } from './api/services.js';
 import { createDestination, ensureLoggedOn, getLogonInfo, initializeDestinationsService } from './auth/reentrance.js';
@@ -352,7 +354,7 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
           const run = () =>
             quickSearch(
               active,
-              { destination: requireDest(), pattern, maxResults: o.maxResults, types: o.types },
+              { destination: requireDest(), pattern, maxResults: o.maxResults, types: searchTypes(o.types) },
               { cold: o.cold },
             );
           const r = await searchWithRevive(run, reviveIfDead);
@@ -363,6 +365,7 @@ export async function createAdtLs(opts: CreateAdtLsOptions): Promise<AdtLsClient
         getLsUri: (adtUri: string) => getLsUri(active, requireDest(), adtUri),
         readFile: (uri: string) => readFile(active, uri),
         abapStat: (uri: string) => abapStat(active, uri),
+        readDirectory: (uri: string) => readDirectory(active, uri),
         writeFile: (uri: string, content: string) => writeFile(active, uri, content),
         delete: (uri: string) => deleteFile(active, uri),
         listInactive: () => getInactiveObjects(active, requireDest()),
@@ -435,7 +438,8 @@ export interface AdtLsClient {
   capabilities(): Promise<AdtLsCapabilities>;
   /** Repository queries + file operations + the name→URI resolver. */
   repository: {
-    /** Search ABAP repository objects by name pattern (e.g. `"CL_ABAP*"`), optionally filtered by ADT type. `cold` retries the cold-index window. */
+    /** Search ABAP repository objects by name pattern (e.g. `"CL_ABAP*"`), optionally filtered by ADT type. `cold` retries the cold-index window.
+     * adt-ls finds nothing for `SRVD/SRV`, `BDEF/BDO`, `DDLX/EX` and `NROB/NRO`, so these are searched by their main type (the only subtype of it). */
     search(
       pattern: string,
       opts?: { maxResults?: number; types?: string[]; cold?: boolean },
@@ -449,6 +453,9 @@ export interface AdtLsClient {
     /** Which version adt-ls serves for the object at `uri` in this session: `'inactive'` when the
      * logged-on user has a draft, else `'active'` (another user's draft is never served). */
     abapStat(uri: string): Promise<SourceVersion>;
+    /** List a repotree directory's children. Pass a directory URI: a file URI answers `[]`
+     * (for a package, drop the last segment of its `getLsUri` file URI). */
+    readDirectory(uri: string): Promise<DirectoryEntry[]>;
     /** Write an AFF file (plain multi-line source) by repotree URI. */
     writeFile(uri: string, content: string): Promise<unknown>;
     /** Delete by AFF URI (use the `.json` metadata URI for objects). */
@@ -511,8 +518,8 @@ export interface AdtLsClient {
     listCreatableObjects(): Promise<unknown>;
     /** Creation details (flat MCP field list) for one object type, e.g. `"CLAS/OC"`. */
     getObjectTypeDetails(objectType: string, opts?: { name?: string }): Promise<unknown>;
-    /** Full creation form contract — each field's value-help target types, name regex, label,
-     * required — parsed from the native UI model (richer than `getObjectTypeDetails`). */
+    /** Full creation form contract — each field's value-help target types, choice values, name
+     * regex, label, required — parsed from the native UI model (richer than `getObjectTypeDetails`). */
     getCreationForm(
       objectType: string,
       opts?: { name?: string },

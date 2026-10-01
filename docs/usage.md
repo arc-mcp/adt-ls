@@ -130,8 +130,15 @@ MCP tool schemas. Object support depends on the installed runtime and backend; s
 
 ```ts
 const { references } = await adt.repository.search('ZCL_*', { types: ['CLAS/OC'], maxResults: 50 });
+// SRVD/SRV, BDEF/BDO, DDLX/EX, NROB/NRO are searched by their main type (adt-ls can't filter them)
 const users = await adt.repository.getUsers();
 const inactive = await adt.repository.listInactive();
+
+// package contents: readDirectory takes the package's DIRECTORY (its file URI answers [])
+const [pkg] = (await adt.repository.search('ZPKG', { types: ['DEVC/K'] })).references;
+const pkgFile = await adt.repository.getLsUri(pkg.uri!);
+const entries = await adt.repository.readDirectory(pkgFile.slice(0, pkgFile.lastIndexOf('/') + 1));
+// → [{ name: 'Source Code Library', kind: 'directory' }, …] (localized category folders)
 ```
 
 ### source & lifecycle — the authoring loop
@@ -150,6 +157,13 @@ const act = await adt.lifecycle.activate({ name: 'ZCL_BAR', objectType: 'CLAS/OC
 if (!act.success) console.error(act.diagnostics); // structured errors with ranges
 await adt.lifecycle.runUnitTests({ name: 'ZCL_BAR', objectType: 'CLAS/OC' });
 await adt.lifecycle.delete({ name: 'ZCL_BAR', objectType: 'CLAS/OC' });
+
+// optional: pass the URI `create` returned to skip the name search on every later call
+// (without a filePath, calls search by name as above)
+const { filePath } = await adt.lifecycle.create({ objectType: 'CLAS/OC', name: 'ZCL_BAZ', packageName: '$TMP', description: 'demo' });
+const baz = { name: 'ZCL_BAZ', objectType: 'CLAS/OC', uri: filePath };
+await adt.lifecycle.update({ ...baz, source: abapSource });
+await adt.lifecycle.activate(baz);
 
 // generators + validation
 await adt.lifecycle.validate({ objectType: 'CLAS/OC', name: 'ZCL_X', packageName: '$TMP', description: 'x' });
@@ -189,9 +203,9 @@ await adt.quality.runUnitTestsWithCoverage(ref);     // { status, result, covera
 const { output } = await adt.services.runApplication({ name: 'ZCL_RUN', objectType: 'CLAS/OC' });
 await adt.services.serviceBindingDetails({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' });
 await adt.services.publishServiceBinding({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' }); // mutating
-await adt.services.listServices({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' }); // OData version + service defs + publish state
+await adt.services.listServices({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' }); // OData version + service defs (+ publish state on V4)
 const { serviceUrl, entitySets } = await adt.services.getServiceInfo({ name: 'ZSB_FOO', objectType: 'SRVB/SVB' });
-// → live OData URL + entity sets (publish a V4 binding first). Uses the abap_business_services MCP tools.
+// → live OData URL + entity sets (publish the binding first). Uses the abap_business_services MCP tools.
 ```
 
 ### transport — CTS

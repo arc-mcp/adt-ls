@@ -102,4 +102,61 @@ describe('lifecycle metadata methods', () => {
       ],
     });
   });
+
+  it('getCreationForm keeps the legal values of choice fields (SRVB bindingType, SRVD sourceType)', async () => {
+    // Shape of the SRVB/SVB and SRVD/SRV UI models, trimmed to the combo controls.
+    const uiModel = JSON.stringify({
+      sections: [
+        {
+          controls: [
+            {
+              $type: 'combo',
+              bindingPath: '$.bindingType',
+              label: { text: 'Binding Type' },
+              values: [
+                { value: 'OData V2 - UI', title: 'OData V2 - UI' },
+                { value: 'OData V4 - Web API', title: 'OData V4 - Web API' },
+              ],
+            },
+            {
+              $type: 'combo',
+              bindingPath: '$.sourceType',
+              label: { text: 'Source Type' },
+              values: [{ value: 'S', title: 'Definition' }, { value: 'X' }, { title: 'no value' }],
+            },
+            {
+              $type: 'valueHelpText',
+              bindingPath: '$.serviceDefinition',
+              required: true,
+              label: { text: 'Service Definition' },
+              onValueHelp: { kind: 'adtTypes', adtTypes: [{ value: 'SRVD' }] },
+            },
+          ],
+        },
+      ],
+    });
+    const driver = {
+      sendRequest: vi.fn(async () => ({ fieldGroupSections: [{ uiModel }] })),
+    } as unknown as LspRequester;
+    const lc = createLifecycle({ driver, callTool: vi.fn(), destination: () => 'DEV' });
+    const form = await lc.getCreationForm('SRVB/SVB');
+    expect(form.fields).toEqual([
+      {
+        path: 'bindingType',
+        required: false,
+        label: 'Binding Type',
+        values: [
+          { value: 'OData V2 - UI', title: 'OData V2 - UI' },
+          { value: 'OData V4 - Web API', title: 'OData V4 - Web API' },
+        ],
+      },
+      {
+        path: 'sourceType',
+        required: false,
+        label: 'Source Type',
+        values: [{ value: 'S', title: 'Definition' }, { value: 'X' }],
+      },
+      { path: 'serviceDefinition', required: true, label: 'Service Definition', valueHelpTypes: ['SRVD'] },
+    ]);
+  });
 });

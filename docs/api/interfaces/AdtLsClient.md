@@ -21,6 +21,7 @@ Repository queries + file operations + the name→URI resolver.
 > **search**(`pattern`, `opts?`): `Promise`\<[`QuickSearchResult`](QuickSearchResult.md)\>
 
 Search ABAP repository objects by name pattern (e.g. `"CL_ABAP*"`), optionally filtered by ADT type. `cold` retries the cold-index window.
+adt-ls finds nothing for `SRVD/SRV`, `BDEF/BDO`, `DDLX/EX` and `NROB/NRO`, so these are searched by their main type (the only subtype of it).
 
 ##### Parameters
 
@@ -142,6 +143,23 @@ logged-on user has a draft, else `'active'` (another user's draft is never serve
 `Promise`\<[`SourceVersion`](../type-aliases/SourceVersion.md)\>
 
 ***
+
+#### readDirectory()
+
+> **readDirectory**(`uri`): `Promise`\<[`DirectoryEntry`](DirectoryEntry.md)[]\>
+
+List a repotree directory's children. Pass a directory URI: a file URI answers `[]`
+(for a package, drop the last segment of its `getLsUri` file URI).
+
+##### Parameters
+
+###### uri
+
+`string`
+
+##### Returns
+
+`Promise`\<[`DirectoryEntry`](DirectoryEntry.md)[]\>
 
 #### listInactive()
 
@@ -422,8 +440,8 @@ Creation details (flat MCP field list) for one object type, e.g. `"CLAS/OC"`.
 
 > **getCreationForm**(`objectType`, `opts?`): `Promise`\<\{ `objectType`: `string`; `fields`: [`CreationField`](CreationField.md)[]; \}\>
 
-Full creation form contract — each field's value-help target types, name regex, label,
-required — parsed from the native UI model (richer than `getObjectTypeDetails`).
+Full creation form contract — each field's value-help target types, choice values, name
+regex, label, required — parsed from the native UI model (richer than `getObjectTypeDetails`).
 
 ##### Parameters
 

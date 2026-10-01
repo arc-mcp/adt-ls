@@ -67,6 +67,26 @@ export async function searchWithRevive(
   return r;
 }
 
+/**
+ * Subtypes whose `quickSearch` filter finds nothing in adt-ls 1.1.2, although the backend's ADT
+ * search filters them correctly and the bare main type finds the objects. Each is the only
+ * subtype of its main type, so a main-type search returns exactly the same objects.
+ */
+const SUBTYPE_FILTER_MISSES = new Set(['SRVD/SRV', 'BDEF/BDO', 'DDLX/EX', 'NROB/NRO']);
+
+/**
+ * The type filter to send to `quickSearch`. Works around the adt-ls bug above: an affected
+ * subtype is replaced by its main type up front, so no search is spent on a filter that can't
+ * match; every other entry is kept (their filter works, and broadening them would return foreign
+ * subtypes, e.g. tables for `TABL/DS`). Drop this once adt-ls passes the filter through.
+ */
+export function searchTypes(types: string[]): string[];
+export function searchTypes(types?: string[]): string[] | undefined;
+export function searchTypes(types?: string[]): string[] | undefined {
+  if (!types?.some((t) => SUBTYPE_FILTER_MISSES.has(t))) return types;
+  return [...new Set(types.map((t) => (SUBTYPE_FILTER_MISSES.has(t) ? t.split('/')[0] : t)))];
+}
+
 /** List inactive (draft) objects on a destination. */
 export function getInactiveObjects(driver: LspRequester, destinationId: string): Promise<unknown[]> {
   return driver.sendRequest<unknown[]>('adtLs/activation/getInactiveObjects', { destination: destinationId });
@@ -116,6 +136,28 @@ export async function abapStat(driver: LspRequester, uri: string): Promise<Sourc
  */
 export function toggleVersion(driver: LspRequester, uri: string): Promise<unknown> {
   return driver.sendRequest('adtLs/fileSystem/toggleVersion', { uri });
+}
+
+/** One child of a repotree directory. */
+export interface DirectoryEntry {
+  name: string;
+  kind: 'file' | 'directory';
+}
+
+/**
+ * List a repotree directory's children (`fileSystem/readDirectory`). Pass a DIRECTORY URI:
+ * for a package, that is its `getLsUri` file URI minus the last segment. On a file URI
+ * adt-ls answers `[]` without an error, which reads like an empty package. Below a package
+ * are localized category folders (they differ per system), then type folders, then one
+ * directory per object holding its source files.
+ */
+export async function readDirectory(driver: LspRequester, uri: string): Promise<DirectoryEntry[]> {
+  const r = await driver.sendRequest<{ children?: Array<{ name: string; type: number }> }>(
+    'adtLs/fileSystem/readDirectory',
+    { uri },
+  );
+  // `type` is VS Code's FileType: 1 file, 2 directory.
+  return (r.children ?? []).map((c) => ({ name: c.name, kind: c.type === 2 ? 'directory' : 'file' }));
 }
 
 /** Delete the enclosing object via its AFF metadata (`.json`) URI.

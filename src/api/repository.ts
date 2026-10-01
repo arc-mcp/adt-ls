@@ -113,6 +113,32 @@ export function writeFile(driver: LspRequester, uri: string, content: string): P
   return driver.sendRequest('adtLs/fileSystem/writeFile', { uri, content });
 }
 
+/** A source file's version: the active one, or the logged-on user's inactive draft. */
+export type SourceVersion = 'active' | 'inactive';
+
+/**
+ * Which version adt-ls serves for the file at `uri` in this session (`fileSystem/abapStat`):
+ * `inactive` when the logged-on user has a draft of it, else `active`. Another user's draft is
+ * never served. Class includes can differ from the main file. `toggleVersion` changes it
+ * for this session only.
+ */
+export async function abapStat(driver: LspRequester, uri: string): Promise<SourceVersion> {
+  const r = await driver.sendRequest<{ version?: number }>('adtLs/fileSystem/abapStat', { uri });
+  if (r?.version === 0) return 'active';
+  if (r?.version === 1) return 'inactive';
+  throw new Error(`abapStat returned no version for ${uri}`);
+}
+
+/**
+ * Flip the version adt-ls serves for the object at `uri` and all its related files (a class's
+ * includes), for this adt-ls session only; nothing changes on SAP. With no draft of the
+ * logged-on user there is nothing to flip to. A write to the object switches it back to the
+ * draft, so decide any way back with `abapStat`, never by counting toggles.
+ */
+export function toggleVersion(driver: LspRequester, uri: string): Promise<unknown> {
+  return driver.sendRequest('adtLs/fileSystem/toggleVersion', { uri });
+}
+
 /** One child of a repotree directory. */
 export interface DirectoryEntry {
   name: string;

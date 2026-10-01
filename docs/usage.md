@@ -133,6 +133,12 @@ const { references } = await adt.repository.search('ZCL_*', { types: ['CLAS/OC']
 // SRVD/SRV, BDEF/BDO, DDLX/EX, NROB/NRO are searched by their main type (adt-ls can't filter them)
 const users = await adt.repository.getUsers();
 const inactive = await adt.repository.listInactive();
+
+// package contents: readDirectory takes the package's DIRECTORY (its file URI answers [])
+const [pkg] = (await adt.repository.search('ZPKG', { types: ['DEVC/K'] })).references;
+const pkgFile = await adt.repository.getLsUri(pkg.uri!);
+const entries = await adt.repository.readDirectory(pkgFile.slice(0, pkgFile.lastIndexOf('/') + 1));
+// → [{ name: 'Source Code Library', kind: 'directory' }, …] (localized category folders)
 ```
 
 ### source & lifecycle — the authoring loop

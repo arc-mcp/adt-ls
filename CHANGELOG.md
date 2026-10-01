@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/arc-mcp/adt-ls/compare/v0.6.1...v0.7.0) (2026-10-01)
+
+
+### Features
+
+* **lifecycle:** optional uri on ObjectRef skips the name search ([#29](https://github.com/arc-mcp/adt-ls/issues/29)) ([783588e](https://github.com/arc-mcp/adt-ls/commit/783588ef4780f5d3dec8220981bd8a0bd9389800))
+* **repository:** typed readDirectory ([#27](https://github.com/arc-mcp/adt-ls/issues/27)) ([132116c](https://github.com/arc-mcp/adt-ls/commit/132116c975a2a1e7e0cb5afe0c11f06992427428))
+* **source:** read active source versions safely ([#28](https://github.com/arc-mcp/adt-ls/issues/28)) ([a7c52ac](https://github.com/arc-mcp/adt-ls/commit/a7c52ac3f2eda95f25d2d1c39a558f289e19461b))
+
+
+### Bug Fixes
+
+* **lifecycle:** keep choice-field values in getCreationForm ([#25](https://github.com/arc-mcp/adt-ls/issues/25)) ([e8d78b8](https://github.com/arc-mcp/adt-ls/commit/e8d78b892cccf8d92e117c97926b37037322fcd1))
+* **repository:** use the main type for subtypes adt-ls can't filter ([#26](https://github.com/arc-mcp/adt-ls/issues/26)) ([9ca86dc](https://github.com/arc-mcp/adt-ls/commit/9ca86dcda6f5e8915b3a5517cd876744272632aa))
+* **services:** refuse getServiceInfo on an un-published binding ([#24](https://github.com/arc-mcp/adt-ls/issues/24)) ([dc961c8](https://github.com/arc-mcp/adt-ls/commit/dc961c8648eea59f6adecda5e0f7900cf00975d0))
+* **transport:** name SAP's reason when the assign lock check fails ([#23](https://github.com/arc-mcp/adt-ls/issues/23)) ([e3272b2](https://github.com/arc-mcp/adt-ls/commit/e3272b29e04a60c15d7329169cf000f1a604ac71))
+
 ## [0.6.1](https://github.com/arc-mcp/adt-ls/compare/v0.6.0...v0.6.1) (2026-09-23)
 
 

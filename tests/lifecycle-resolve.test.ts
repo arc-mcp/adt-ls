@@ -21,6 +21,7 @@ function lifecycleWithIndex(index: Record<string, Array<{ name: string; uri: str
         return { references: index[type] ?? [] } as T;
       }
       if (method === 'adtLs/repository/getLsUri') return { uri: LS_URI } as T;
+      if (method === 'adtLs/fileSystem/readFile') return { content: `read ${(params as { uri: string }).uri}` } as T;
       throw new Error(`unexpected request: ${method}`);
     },
   };
@@ -83,5 +84,42 @@ describe('lifecycle.resolveAffUri', () => {
     const { lc, searched } = lifecycleWithIndex({});
     await expect(lc.resolveAffUri({ name: 'ZUI_X', objectType: 'SRVD/SRV' })).rejects.toThrow('not found via search');
     expect([...new Set(searched)]).toEqual(['SRVD']);
+  });
+
+  describe('with ref.uri', () => {
+    const URI = 'abap:/repotree-v1/ADTLS/Source%20Code%20Library/Classes/ZCL_X/zcl_x.clas.abap';
+
+    it('returns the uri without searching', async () => {
+      const { lc, searched } = lifecycleWithIndex({});
+      await expect(lc.resolveAffUri({ name: 'ZCL_X', objectType: 'CLAS/OC', uri: URI })).resolves.toBe(URI);
+      expect(searched).toEqual([]);
+    });
+
+    it('rejects a uri of another destination', async () => {
+      const { lc, searched } = lifecycleWithIndex({});
+      for (const other of [URI.replace('/ADTLS/', '/OTHER/'), URI.replace('/ADTLS/', '/adtls/')]) {
+        await expect(lc.resolveAffUri({ name: 'ZCL_X', objectType: 'CLAS/OC', uri: other })).rejects.toThrow(
+          'not a repotree URI of destination ADTLS',
+        );
+      }
+      expect(searched).toEqual([]);
+    });
+
+    it('reads a class include next to the given uri', async () => {
+      const { lc, searched } = lifecycleWithIndex({});
+      await expect(
+        lc.readSource({ name: 'ZCL_X', objectType: 'CLAS/OC', uri: URI, include: 'testclasses' }),
+      ).resolves.toBe(`read ${URI.replace(/\.clas\.abap$/, '.clas.testclasses.abap')}`);
+      expect(searched).toEqual([]);
+    });
+
+    it('rejects a uri that is not a repotree URI', async () => {
+      const { lc } = lifecycleWithIndex({});
+      for (const uri of ['/sap/bc/adt/oo/classes/zcl_x', 'abap:/repotree-v1/%E0%A4%A/x.clas.abap']) {
+        await expect(lc.resolveAffUri({ name: 'ZCL_X', objectType: 'CLAS/OC', uri })).rejects.toThrow(
+          'not a repotree URI',
+        );
+      }
+    });
   });
 });

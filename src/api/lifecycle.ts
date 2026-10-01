@@ -29,6 +29,14 @@ export interface ObjectRef {
   name: string;
   /** ADT type code, e.g. "CLAS/OC", "INTF/OI", "DDLS/DF". */
   objectType: string;
+  /**
+   * The object's repotree AFF URI (its main file), e.g. `filePath` from `lifecycle.create` or a
+   * previous `resolveAffUri`. When set, calls use it instead of searching by name, which saves
+   * the search round trips and doesn't depend on the search index. It must belong to the
+   * connected destination. `name` and `objectType` are still required: service-binding calls
+   * look the binding up by name, and results and errors name the object.
+   */
+  uri?: string;
 }
 export interface ActivateResult {
   success: boolean;
@@ -128,9 +136,18 @@ export function createLifecycle(deps: LifecycleDeps) {
     return d;
   };
 
-  /** Resolve {name, objectType} → repotree AFF URI (search → getLsUri). */
+  /** Resolve {name, objectType} → repotree AFF URI (search → getLsUri), or take `ref.uri`. */
   async function resolveAffUri(ref: ObjectRef): Promise<string> {
     const d = dest();
+    if (ref.uri) {
+      // abap:/repotree-v1/<destination>/… — a URI of another destination (e.g. taken from
+      // another client) names a destination this session doesn't serve.
+      const segment = /^abap:\/repotree-v1\/([^/]+)\//.exec(ref.uri)?.[1];
+      if (segment !== encodeURIComponent(d)) {
+        throw new Error(`uri of ${ref.name} is not a repotree URI of destination ${d}: ${ref.uri}`);
+      }
+      return ref.uri;
+    }
     const doSearch = (type: string) =>
       quickSearch(driver, { destination: d, pattern: ref.name, maxResults: 20, types: [type] }, { cold: true });
     const findHit = (references: SearchReference[]) =>

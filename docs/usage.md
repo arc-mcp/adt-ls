@@ -156,6 +156,13 @@ if (!act.success) console.error(act.diagnostics); // structured errors with rang
 await adt.lifecycle.runUnitTests({ name: 'ZCL_BAR', objectType: 'CLAS/OC' });
 await adt.lifecycle.delete({ name: 'ZCL_BAR', objectType: 'CLAS/OC' });
 
+// optional: pass the URI `create` returned to skip the name search on every later call
+// (without a filePath, calls search by name as above)
+const { filePath } = await adt.lifecycle.create({ objectType: 'CLAS/OC', name: 'ZCL_BAZ', packageName: '$TMP', description: 'demo' });
+const baz = { name: 'ZCL_BAZ', objectType: 'CLAS/OC', uri: filePath };
+await adt.lifecycle.update({ ...baz, source: abapSource });
+await adt.lifecycle.activate(baz);
+
 // generators + validation
 await adt.lifecycle.validate({ objectType: 'CLAS/OC', name: 'ZCL_X', packageName: '$TMP', description: 'x' });
 await adt.lifecycle.generate({ generatorId: 'x-ui-service', content: jsonSchemaInput, packageName: 'ZPKG' });

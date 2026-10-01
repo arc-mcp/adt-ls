@@ -586,9 +586,13 @@ export function createLifecycle(deps: LifecycleDeps) {
           isTransportCheckSuccessful?: boolean;
           isLockedInRequests?: boolean;
           locks?: Array<{ number?: string }>;
+          checkMessages?: { errorMessages?: Array<{ message?: string }> };
         } | null;
         if (!r || r.isTransportCheckSuccessful === false || (r.isLockedInRequests && !Array.isArray(r.locks))) {
-          throw new Error(`Could not verify the CTS lock for ${args.name}.`);
+          // SAP names the reason here, e.g. a lock in a task "not specified for this client".
+          const reasons = (r?.checkMessages?.errorMessages ?? []).map((m) => m.message).filter(Boolean);
+          const detail = reasons.length > 0 ? ` ${reasons.join(' ')}` : '';
+          throw new Error(`Could not verify the CTS lock for ${args.name}.${detail}`);
         }
         const lockedIn = (r.locks ?? []).map((l) => l.number?.toUpperCase()).filter((n): n is string => Boolean(n));
         if (r.isLockedInRequests === true && lockedIn.length === 0) {
